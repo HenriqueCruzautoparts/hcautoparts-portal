@@ -1,0 +1,394 @@
+'use client';
+
+import { useState } from 'react';
+import { Search, LayoutDashboard, Activity, CheckCircle2, ImagePlus, X } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import { SearchHistory } from '@/components/SearchHistory';
+
+export default function Home() {
+  const [query, setQuery] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<any | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [imageBase64, setImageBase64] = useState<string | null>(null);
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) {
+        setError("A imagem deve ter no máximo 5MB.");
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64String = reader.result as string;
+        setImagePreview(base64String);
+        setImageBase64(base64String);
+        setError(null);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const clearImage = () => {
+    setImagePreview(null);
+    setImageBase64(null);
+  };
+
+  const handleSearch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!query.trim() && !imageBase64) return;
+
+    setLoading(true);
+    setError(null);
+    setResult(null);
+
+    try {
+      const payload: any = { query };
+      if (imageBase64) {
+        payload.image = imageBase64;
+      }
+
+      const res = await fetch('/api/pesquisa', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Erro ao buscar dados.');
+      }
+
+      // Process "RAW_URL:" format from prompt to standard markdown links
+      // Agora data já é o objeto estruturado { query, analise_tecnica, ml_results }
+      setResult(data);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleHistorySelect = (historyQuery: string, historyResult: string) => {
+    setQuery(historyQuery);
+    setLoading(false);
+    setError(null);
+    try {
+      const parsedResult = JSON.parse(historyResult);
+      // Verifica se é o formato novo (dados_tecnicos) ou intermediário (analise_tecnica)
+      if (parsedResult?.dados_tecnicos || parsedResult?.analise_tecnica) {
+        setResult(parsedResult);
+      } else {
+        setResult({ analise_tecnica: historyResult, ml_results: [] });
+      }
+    } catch (e) {
+      // Compatibilidade com pesquisas antigas (só string)
+      const formattedResult = (historyResult || "").replace(
+        /\[RAW_URL:\s*(http[^\]]+)\]/g,
+        '[Ver Oferta]($1)'
+      );
+      setResult({ analise_tecnica: formattedResult, ml_results: [] });
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-[#F2F2F7] dark:bg-black text-black dark:text-white font-sans selection:bg-blue-500/30 transition-colors duration-300">
+      <main className="relative z-10 container mx-auto px-4 sm:px-6 py-8 md:py-16 max-w-5xl">
+
+        {/* Header Section */}
+        <div className="flex flex-col items-center justify-center text-center mb-10 space-y-3">
+          <div className="inline-flex items-center justify-center p-2 mb-2 rounded-2xl bg-white dark:bg-zinc-900 border border-black/5 dark:border-white/5 shadow-sm">
+            <LayoutDashboard className="w-6 h-6 text-[#007AFF]" />
+            <span className="ml-2 text-lg font-semibold text-black dark:text-white tracking-tight">
+              AutoParts AI
+            </span>
+          </div>
+          <h1 className="text-4xl md:text-5xl font-bold tracking-tight text-black dark:text-white pb-1">
+            Pesquisa Inteligente <br className="hidden md:block" />
+            <span className="text-[#007AFF]">
+              de Autopeças
+            </span>
+          </h1>
+          <p className="text-base md:text-lg text-gray-500 dark:text-gray-400 max-w-xl mt-3 font-normal">
+            Encontre a peça específica para o seu veículo e pague mais barato.
+          </p>
+        </div>
+
+        {/* Search Bar Container */}
+        <div className="max-w-3xl mx-auto w-full mb-12 relative">
+          <form
+            onSubmit={handleSearch}
+            className="relative flex flex-col bg-white/80 dark:bg-zinc-900/80 backdrop-blur-xl border border-black/5 dark:border-white/5 rounded-[32px] p-2 shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:shadow-[0_8px_30px_rgb(0,0,0,0.2)] focus-within:ring-2 focus-within:ring-[#007AFF]/50 transition-all duration-300"
+          >
+            {imagePreview && (
+              <div className="relative self-start ml-4 mt-2 mb-2">
+                <img src={imagePreview} alt="Preview" className="h-20 w-20 object-cover rounded-2xl border border-black/5 dark:border-white/10 shadow-sm" />
+                <button
+                  type="button"
+                  onClick={clearImage}
+                  className="absolute -top-2 -right-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 rounded-full p-1.5 shadow-sm transition-transform hover:scale-105"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+
+            <div className="flex items-center w-full">
+              <div className="pl-6 pr-2">
+                <Search className="w-5 h-5 text-gray-400" />
+              </div>
+
+              <label className="cursor-pointer p-2 rounded-full hover:bg-black/5 dark:hover:bg-white/5 transition-colors group relative">
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleImageUpload}
+                  disabled={loading}
+                />
+                <ImagePlus className="w-5 h-5 text-gray-400 group-hover:text-[#007AFF] transition-colors" />
+              </label>
+
+              <input
+                type="text"
+                className="flex-1 bg-transparent border-none outline-none text-black dark:text-white px-2 py-3 text-[17px] placeholder:text-gray-400"
+                placeholder="Chassi, código OEM ou descrição da peça..."
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                disabled={loading}
+              />
+              <button
+                type="submit"
+                disabled={loading || (!query.trim() && !imageBase64)}
+                className="bg-[#007AFF] hover:bg-[#007AFF]/90 text-white rounded-full px-6 py-3 font-semibold text-[15px] transition-all duration-200 transform active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center ml-2 shadow-sm"
+              >
+                <span>{loading ? 'Buscando...' : 'Buscar'}</span>
+                {!loading && (
+                  <div className="absolute inset-0 h-full w-full opacity-0 group-hover:opacity-20 bg-gradient-to-r from-transparent via-white to-transparent -translate-x-full group-hover:animate-shimmer" />
+                )}
+              </button>
+            </div>
+          </form>
+        </div>
+
+        {/* Search History */}
+        {!result && !loading && (
+          <SearchHistory onSelect={handleHistorySelect} />
+        )}
+
+        {/* Error State */}
+        {error && (
+          <div className="max-w-3xl mx-auto mb-8 p-4 rounded-2xl bg-[#FF3B30]/10 border border-[#FF3B30]/20 flex items-start space-x-4 animate-in fade-in slide-in-from-bottom-4">
+            <Activity className="w-5 h-5 text-[#FF3B30] flex-shrink-0 mt-0.5" />
+            <div>
+              <h3 className="text-[#FF3B30] font-medium text-[15px]">Erro na busca</h3>
+              <p className="text-[#FF3B30]/80 mt-1 text-[15px]">{error}</p>
+            </div>
+          </div>
+        )}
+
+        {/* Loading State */}
+        {loading && (
+          <div className="flex flex-col items-center justify-center space-y-4 animate-in fade-in duration-500 py-12">
+            <div className="w-8 h-8 border-4 border-[#007AFF]/20 border-t-[#007AFF] rounded-full animate-spin" />
+            <p className="text-gray-500 dark:text-gray-400 font-medium text-[15px]">
+              Buscando informações e catálogos...
+            </p>
+          </div>
+        )}
+
+        {/* Results Container */}
+        {result && !loading && (
+          <div className="animate-in zoom-in-95 fade-in duration-500 max-w-4xl mx-auto group space-y-8">
+
+            {/* ML API Products Container */}
+            {result.ml_results && result.ml_results.length > 0 && (
+              <div className="rounded-[32px] bg-white dark:bg-zinc-900 border border-black/5 dark:border-white/5 p-6 md:p-8 shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:shadow-[0_8px_30px_rgb(0,0,0,0.2)]">
+                <h2 className="text-xl font-bold text-black dark:text-white mb-6 flex items-center tracking-tight">
+                  <span className="w-8 h-8 rounded-full bg-[#FFD600]/20 flex items-center justify-center mr-3">
+                    <span className="font-bold text-[#FF9500] text-xs">ML</span>
+                  </span>
+                  Ofertas no Mercado Livre
+                </h2>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
+                  {result.ml_results.map((item: any) => {
+                    let href = item.link;
+                    const mlAffiliateId = process.env.NEXT_PUBLIC_ML_AFFILIATE_ID;
+                    if (href.includes('mercadolivre.com.br') && mlAffiliateId) {
+                      try {
+                        const url = new URL(href);
+                        url.searchParams.set('af_prid', mlAffiliateId);
+                        href = url.toString();
+                      } catch (e) { }
+                    }
+
+                    return (
+                      <a
+                        key={item.id}
+                        href={href}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex flex-col rounded-2xl bg-white dark:bg-zinc-800 border border-black/5 dark:border-white/5 overflow-hidden transform hover:scale-[1.02] transition duration-200 shadow-sm hover:shadow-md relative"
+                      >
+                        {item.brand && (
+                          <div className="absolute top-2 left-2 z-10 bg-black/70 backdrop-blur-md text-white text-[11px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider">
+                            {item.brand}
+                          </div>
+                        )}
+                        {item.coupon && (
+                          <div className="absolute top-2 right-2 z-10 bg-[#00A650] text-white text-[11px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider shadow-sm flex items-center">
+                            Cupom: {item.coupon}
+                          </div>
+                        )}
+                        <div className="h-40 w-full bg-white flex items-center justify-center p-2">
+                          <img src={item.thumbnail} alt={item.title} className="max-h-full max-w-full object-contain mix-blend-multiply" />
+                        </div>
+                        <div className="p-4 flex flex-col flex-grow justify-between">
+                          <h3 className="text-[15px] font-medium text-black dark:text-gray-200 line-clamp-2 mb-3 leading-snug">
+                            {item.title}
+                          </h3>
+                          <div>
+                            {item.price !== null ? (
+                              <p className="text-[22px] font-bold text-black dark:text-white flex items-start">
+                                <span className="text-sm font-normal text-gray-500 dark:text-gray-400 mr-1 mt-1">R$</span>
+                                {new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2 }).format(item.price)}
+                              </p>
+                            ) : (
+                              <p className="text-[17px] font-bold text-black dark:text-white mt-1">
+                                Ver Oferta Exata
+                              </p>
+                            )}
+                            <span className="mt-3 w-full block text-center py-2.5 px-4 rounded-xl bg-blue-50 dark:bg-[#007AFF]/10 text-[#007AFF] font-bold text-[15px] hover:bg-blue-100 dark:hover:bg-[#007AFF]/20 transition-colors">
+                              Clique Aqui para Comprar
+                            </span>
+                          </div>
+                        </div>
+                      </a>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Analysis Container */}
+            <div className="rounded-[32px] bg-white dark:bg-zinc-900 border border-black/5 dark:border-white/5 shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:shadow-[0_8px_30px_rgb(0,0,0,0.2)] p-6 md:p-10">
+              <div className="flex items-center space-x-3 mb-6 pb-6 border-b border-black/5 dark:border-white/5">
+                <div className="w-12 h-12 rounded-2xl bg-[#007AFF]/10 flex items-center justify-center">
+                  <CheckCircle2 className="w-6 h-6 text-[#007AFF]" />
+                </div>
+                <div>
+                  <h2 className="text-[22px] font-bold text-black dark:text-white tracking-tight">
+                    Análise Técnica da Peça
+                  </h2>
+                  <p className="text-gray-500 dark:text-gray-400 text-sm mt-0.5">{result.query}</p>
+                </div>
+              </div>
+
+              {result.dados_tecnicos?.identificacao_tecnica ? (
+                <div className="space-y-8 text-[#1C1C1E] dark:text-gray-300 text-sm md:text-base leading-relaxed">
+
+                  {/* Identificação Técnica */}
+                  <div>
+                    <h3 className="text-xl font-bold text-black dark:text-white mb-4 border-b border-black/5 dark:border-white/5 pb-2">🛠️ Identificação Técnica</h3>
+                    <ul className="space-y-2">
+                      <li><strong>Peça:</strong> {result.dados_tecnicos.identificacao_tecnica.peca}</li>
+                      <li><strong>Código OEM:</strong> {result.dados_tecnicos.identificacao_tecnica.codigo_oem}</li>
+                      <li><strong>Nome em Inglês:</strong> {result.dados_tecnicos.identificacao_tecnica.nome_ingles}</li>
+                      <li><strong>Veículo Base:</strong> {result.dados_tecnicos.identificacao_tecnica.veiculo_base}</li>
+                      <li><strong>Validação de Catálogo:</strong> {result.dados_tecnicos.identificacao_tecnica.validacao_catalogo}</li>
+                    </ul>
+                  </div>
+
+                  {/* Intercambiabilidade */}
+                  <div>
+                    <h3 className="text-xl font-bold text-black dark:text-white mb-4 border-b border-black/5 dark:border-white/5 pb-2">🔄 Compatibilidade Cruzada (Intercambiabilidade)</h3>
+                    <ul className="list-disc list-inside space-y-1">
+                      {result.dados_tecnicos.intercambiabilidade?.map((item: string, idx: number) => (
+                        <li key={idx}>{item}</li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  {/* Referência AliExpress */}
+                  {result.dados_tecnicos.referencia_aliexpress && (
+                    <div className="bg-blue-50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-700/30 p-5 rounded-2xl mt-6">
+                      <h3 className="text-lg font-bold text-blue-800 dark:text-blue-500 mb-3 flex items-center">
+                        🌏 Referência AliExpress (Opção Importação)
+                      </h3>
+                      <ul className="space-y-2 text-blue-900 dark:text-blue-100/80">
+                        <li><strong>Termo de Busca:</strong> {result.dados_tecnicos.referencia_aliexpress.termo_busca}</li>
+                        <li><strong>Recomendação do Especialista:</strong> {result.dados_tecnicos.referencia_aliexpress.recomendacao}</li>
+                        <li className="pt-2">
+                          <a
+                            href={result.dados_tecnicos.referencia_aliexpress.link_busca}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center text-white bg-[#007AFF] hover:bg-[#007AFF]/90 px-4 py-2 rounded-xl font-medium transition-colors"
+                          >
+                            Fazer Busca no AliExpress
+                          </a>
+                        </li>
+                      </ul>
+                    </div>
+                  )}
+
+                </div>
+              ) : (
+                <div className="prose prose-blue dark:prose-invert max-w-none prose-sm md:prose-base text-[#1C1C1E] dark:text-gray-300">
+                  <ReactMarkdown
+                    remarkPlugins={[remarkGfm]}
+                    components={{
+                      h1: ({ node, ...props }) => <h1 className="text-2xl font-bold text-black dark:text-white mt-6 mb-4 tracking-tight" {...props} />,
+                      h2: ({ node, ...props }) => <h2 className="text-xl font-semibold text-black dark:text-white mt-6 mb-3 tracking-tight" {...props} />,
+                      h3: ({ node, ...props }) => <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-200 mt-5 mb-2" {...props} />,
+                      p: ({ node, ...props }) => <p className="mb-4 leading-relaxed" {...props} />,
+                      ul: ({ node, ...props }) => <ul className="list-disc list-inside mb-6 space-y-1.5" {...props} />,
+                      li: ({ node, ...props }) => <li className="pl-1" {...props} />,
+                      strong: ({ node, ...props }) => <strong className="font-semibold text-black dark:text-white" {...props} />,
+                      table: ({ node, ...props }) => (
+                        <div className="overflow-x-auto mb-6 rounded-2xl border border-black/5 dark:border-white/10 hidden-scrollbar">
+                          <table className="w-full text-left border-collapse text-[15px]" {...props} />
+                        </div>
+                      ),
+                      thead: ({ node, ...props }) => <thead className="bg-[#F2F2F7] dark:bg-zinc-800/50" {...props} />,
+                      th: ({ node, ...props }) => <th className="px-4 py-3 text-sm font-semibold text-black dark:text-white border-b border-black/5 dark:border-white/10" {...props} />,
+                      td: ({ node, ...props }) => <td className="px-4 py-3 border-b border-black/5 dark:border-white/5 whitespace-nowrap" {...props} />,
+                      a: ({ node, ...props }) => (
+                        <a
+                          className="inline-flex items-center text-[#007AFF] hover:underline font-medium"
+                          target="_blank"
+                          rel="noreferrer"
+                          {...props}
+                        />
+                      ),
+                    }}
+                  >
+                    {result.analise_tecnica}
+                  </ReactMarkdown>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </main>
+
+      <style dangerouslySetInnerHTML={{
+        __html: `
+        @keyframes shimmer {
+          100% {
+            transform: translateX(100%);
+          }
+        }
+        .animate-shimmer {
+          animation: shimmer 1.5s infinite;
+        }
+      `}} />
+    </div>
+  );
+}
