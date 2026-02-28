@@ -47,33 +47,33 @@ export function SearchHistory({ onSelect }: SearchHistoryProps) {
         <div className="max-w-3xl mx-auto w-full mb-8 animate-in fade-in duration-500">
             <div className="flex items-center justify-between mb-3 px-1">
                 <div className="flex items-center space-x-2">
-                    <Clock className="w-5 h-5 text-gray-400" />
-                    <h3 className="text-gray-900 dark:text-gray-100 font-semibold text-[17px] tracking-tight">Recentes</h3>
+                    <Clock className="w-5 h-5 text-[#8E8E93]" />
+                    <h3 className="text-white font-semibold text-[17px] tracking-tight">Recentes</h3>
                 </div>
             </div>
-            <div className="bg-white dark:bg-[#1C1C1E] rounded-[24px] overflow-hidden shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:shadow-[0_8px_30px_rgb(0,0,0,0.12)] border border-black/5 dark:border-white/5">
+            <div className="bg-[#1C1C1E]/60 backdrop-blur-xl rounded-[24px] overflow-hidden shadow-[0_8px_30px_rgb(0,0,0,0.5)] border border-white/10">
                 {history.map((item, index) => (
                     <div key={item.id} className="relative">
                         <button
                             onClick={() => onSelect(item.query, item.result)}
-                            className="w-full flex items-center justify-between p-4 hover:bg-gray-50 dark:hover:bg-zinc-800/50 transition-colors duration-200 group text-left active:bg-gray-100 dark:active:bg-zinc-800"
+                            className="w-full flex items-center justify-between p-4 bg-transparent hover:bg-white/5 transition-colors duration-200 group text-left active:bg-white/10"
                         >
                             <div className="truncate pr-4 flex-1">
-                                <p className="text-[17px] text-black dark:text-white font-medium truncate">
+                                <p className="text-[17px] text-white font-medium truncate group-hover:text-[#FF2D55] transition-colors">
                                     {item.query}
                                 </p>
-                                <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-0.5">
+                                <p className="text-[13px] text-[#8E8E93] mt-0.5">
                                     {new Date(item.created_at).toLocaleDateString('pt-BR', {
                                         day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit'
                                     })}
                                 </p>
                             </div>
                             <div className="flex-shrink-0 ml-2">
-                                <ChevronRight className="w-5 h-5 text-gray-300 dark:text-gray-600 group-hover:text-[#007AFF] transition-colors" />
+                                <ChevronRight className="w-5 h-5 text-[#8E8E93] group-hover:text-[#FF2D55] transition-colors" />
                             </div>
                         </button>
                         {index < history.length - 1 && (
-                            <div className="absolute bottom-0 left-4 right-0 h-[1px] bg-gray-100 dark:bg-zinc-800" />
+                            <div className="absolute bottom-0 left-4 right-0 h-[1px] bg-white/5" />
                         )}
                     </div>
                 ))}
