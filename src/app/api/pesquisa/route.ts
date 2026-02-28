@@ -56,9 +56,15 @@ async function getGeminiAnalysis(query: string, image?: string): Promise<GeminiR
     5. Para cada marca, realizar uma busca rigorosa na web em tempo real para fornecer os 2 melhores preços encontrados, focando estritamente em entregar a opção de menor preço absoluto com links diretos, válidos e clicáveis de compra (priorizando Mercado Livre), além das condições de parcelamento e eventuais cupons/descontos.
     6. Identificar referências e disponibilidade no AliExpress para peças onde a importação oferece grande vantagem.
 
-    REGRAS OBRIGATÓRIAS:
-    1. Você DEVE retornar EXCLUSIVAMENTE um objeto JSON válido. NUNCA formatação de markdown fora do JSON.
-    2. O JSON DEVE ter EXATAMENTE a seguinte estrutura restrita com essas chaves e formatação de texto limpa:
+    REGRAS OBRIGATÓRIAS DE BUSCA E LINKS (CRÍTICAS):
+    1. A "Opção 1" de cada marca DEVE OBRIGATORIAMENTE possuir um LINK REAL e clicarvel do Mercado Livre (mercadolivre.com.br).
+    2. NUNCA, SOB HIPÓTESE ALGUMA, CONSTRUA OU INVENTE URLs DE PRODUTOS ESPECÍFICOS (ex: produto.mercadolivre.com.br/MLB-1234...). Se você não tem certeza absoluta do ID de um anúncio exato hoje, RETORNE O LINK DE UMA BUSCA EXATA E FILTRADA no site do Mercado Livre. 
+    3. Exemplo de link seguro e válido que você PODE gerar: "https://lista.mercadolivre.com.br/pecas/carros/[TERMO-DE-BUSCA-AQUI]"
+    4. PREÇOS, CUPONS E PARCELAMENTO: Apenas exiba Cupons Se eles realmente existirem publicamente para a marca. Caso não exista, use o valor estrito "Desconto não disponível". Se o parcelamento for sem juros, você DEVE escrever explicitamente "sem juros" no campo.
+
+    REGRAS DE FORMATO JSON:
+    1. Você DEVE retornar EXCLUSIVAMENTE um objeto JSON válido.
+    2. O JSON DEVE ter EXATAMENTE a seguinte estrutura:
     {
       "identificacao_tecnica": {
         "peca": "Nome Técnico em Português",
@@ -79,16 +85,16 @@ async function getGeminiAnalysis(query: string, image?: string): Promise<GeminiR
             {
               "tipo": "O MENOR PREÇO ENCONTRADO",
               "preco": 450.00,
-              "parcelamento": "em até 10x de R$ 45,00",
-              "cupom": "Informar cupom, desconto no PIX ou Não localizado",
-              "link": "URL VÁLIDA e DIRETA do anúncio com o menor preço (ex: Mercado Livre)"
+              "parcelamento": "em até 10x de R$ 45,00 sem juros",
+              "cupom": "Informar cupom verdadeiro ou Desconto não disponível",
+              "link": "URL VÁLIDA E TESTADA do Mercado Livre Mencionada nas Regras (NUNCA INVENTADA)"
             },
             {
               "tipo": "Loja Oficial/Alternativa Segura",
               "preco": 480.00,
               "parcelamento": "em até 12x de R$ 40,00",
-              "cupom": "Informar cupom, desconto no PIX ou Não localizado",
-              "link": "URL VÁLIDA e DIRETA do produto"
+              "cupom": "Informar cupom verdadeiro ou Desconto não disponível",
+              "link": "URL VÁLIDA E TESTADA"
             }
           ]
         }
@@ -99,12 +105,10 @@ async function getGeminiAnalysis(query: string, image?: string): Promise<GeminiR
         "recomendacao": "Análise crítica: É seguro importar? Qual o risco de taxa? É item de segurança?"
       }
     }
-    NOTA 1: Você DEVE usar sua ferramenta de Google Search para recuperar links reais do mercadolivre.com.br ou amazon. Nunca deduzir ou inventar URLs. A "Opção 1" de cada marca DEVE obrigatoriamente ser a do MENOR PREÇO.
-    NOTA 2: "top_3_marcas" DEVE ser um array contendo as 3 melhores marcas sendo 1 Original, 1 Primeira Linha e 1 Custo Beneficio, contendo 2 opções de compra (link real) cada.
-    NOTA 3: Os textos NÃO DEVEM conter tags HTML.
-    NOTA 4: Sempre realize buscas prévias no baixecatalogo.com.br. Busque intercambiabilidade agressivamente (ex: VW/Audi/Porsche). Nas "Top 3", priorize (Bosch, Mahle, Mann, NGK, Ina, SKF, Bilstein, Denso, Valeo, TRW, Nakata).
+    
+    NOTA: Sempre realize buscas prévias no baixecatalogo.com.br. Busque intercambiabilidade agressivamente.
 
-    TEXTO FORNECIDO PELO USUÁRIO (Placa, Chassi ou Descrição): ${query || "Apenas análise visual."}
+    TEXTO FORNECIDO PELO USUÁRIO (Chassi ou Descrição): ${query || "Apenas análise visual."}
     `;
 
     let result;
