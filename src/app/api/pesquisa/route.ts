@@ -1,6 +1,7 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
+import { Jimp } from "jimp";
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY as string);
 
@@ -116,13 +117,29 @@ async function getGeminiAnalysis(query: string, image?: string): Promise<GeminiR
 
     let result;
     if (image) {
-        const imageParts = [{
-            inlineData: {
-                data: image.split(',')[1] || image,
-                mimeType: "image/jpeg"
-            }
-        }];
-        result = await model.generateContent([promptMestre, ...imageParts]);
+        try {
+            // Remove the data:image prefix if present to get raw base64
+            const rawBase64 = image.split(',')[1] || image;
+            const imageBuffer = Buffer.from(rawBase64, 'base64');
+
+            // Resize and compress the image to prevent Vercel/Gemini payload limits
+            const jimpImage = await Jimp.read(imageBuffer);
+            jimpImage.scaleToFit({ w: 800, h: 800 });
+
+            const compressedBuffer = await jimpImage.getBuffer("image/jpeg");
+            const compressedBase64 = compressedBuffer.toString('base64');
+
+            const imageParts = [{
+                inlineData: {
+                    data: compressedBase64,
+                    mimeType: "image/jpeg"
+                }
+            }];
+            result = await model.generateContent([promptMestre, ...imageParts]);
+        } catch (imgError) {
+            console.error("Erro ao processar imagem:", imgError);
+            throw new Error("Falha ao processar a imagem enviada. Certifique-se de ser um formato válido.");
+        }
     } else {
         result = await model.generateContent(promptMestre);
     }
