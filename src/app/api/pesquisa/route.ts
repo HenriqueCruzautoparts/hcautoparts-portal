@@ -56,11 +56,14 @@ async function getGeminiAnalysis(query: string, image?: string): Promise<GeminiR
     5. Para cada marca, realizar uma busca rigorosa na web em tempo real para fornecer os 2 melhores preços encontrados, focando estritamente em entregar a opção de menor preço absoluto com links diretos, válidos e clicáveis de compra (priorizando Mercado Livre), além das condições de parcelamento e eventuais cupons/descontos.
     6. Identificar referências e disponibilidade no AliExpress para peças onde a importação oferece grande vantagem.
 
-    REGRAS OBRIGATÓRIAS DE BUSCA E LINKS (CRÍTICAS):
-    1. A "Opção 1" de cada marca DEVE OBRIGATORIAMENTE possuir um LINK REAL e clicarvel do Mercado Livre (mercadolivre.com.br).
-    2. NUNCA, SOB HIPÓTESE ALGUMA, CONSTRUA OU INVENTE URLs DE PRODUTOS ESPECÍFICOS (ex: produto.mercadolivre.com.br/MLB-1234...). Se você não tem certeza absoluta do ID de um anúncio exato hoje, RETORNE O LINK DE UMA BUSCA EXATA E FILTRADA no site do Mercado Livre. 
-    3. Exemplo de link seguro e válido que você PODE gerar: "https://lista.mercadolivre.com.br/pecas/carros/[TERMO-DE-BUSCA-AQUI]"
-    4. PREÇOS, CUPONS E PARCELAMENTO: Apenas exiba Cupons Se eles realmente existirem publicamente para a marca. Caso não exista, use o valor estrito "Desconto não disponível". Se o parcelamento for sem juros, você DEVE escrever explicitamente "sem juros" no campo.
+    REGRAS OBRIGATÓRIAS DE BUSCA E LINKS (CRÍTICAS - TOLERÂNCIA ZERO):
+    1. EXCLUSIVIDADE: TODOS os links fornecidos nas opções de compra DEVEM SER EXCLUSIVAMENTE do domínio mercadolivre.com.br. Você está PROIBIDO de retornar links da Amazon, Shopee, ou qualquer outro e-commerce.
+    2. RISCO DE LINKS QUEBRADOS: Você está TERMINANTEMENTE PROIBIDO de inventar, deduzir ou tentar acessar links de produtos específicos (Ex: produto.mercadolivre.com.br/... ou anúncios contendo códigos MLB-...). Estes anúncios expiram ou você pode alucinar IDs inválidos. NUNCA FAÇA ISSO.
+    3. COMO GERAR O LINK: Para garantir 100% de precisão, você DEVE SEMPRE construir um LINK DE BUSCA no formato padrão do Mercado Livre para cada opção, substituindo espaços por hífens.
+       * ESTRUTURA OBRIGATÓRIA: "https://lista.mercadolivre.com.br/[nome-da-peca]-[modelo-ou-chassi]-[marca]"
+       * EXEMPLO PERFEITO: "https://lista.mercadolivre.com.br/amortecedor-dianteiro-gol-g5-monroe" 
+    4. PREÇOS e CUPONS: Continue encontrando o menor preço real na web como referência para preencher o valor, mas na hora de entregar o link ao usuário na chave "link", entregue SEMPRE o Link de Busca (criado no passo 3) garantindo que o usuário ache os resultados validos.
+    5. Se não houver cupom explícito, use "Desconto não disponível". Se o parcelamento não tiver juros ocultos nas lojas recomendadas, você DEVE colocar no texto a frase "sem juros".
 
     REGRAS DE FORMATO JSON:
     1. Você DEVE retornar EXCLUSIVAMENTE um objeto JSON válido.
@@ -87,14 +90,14 @@ async function getGeminiAnalysis(query: string, image?: string): Promise<GeminiR
               "preco": 450.00,
               "parcelamento": "em até 10x de R$ 45,00 sem juros",
               "cupom": "Informar cupom verdadeiro ou Desconto não disponível",
-              "link": "URL VÁLIDA E TESTADA do Mercado Livre Mencionada nas Regras (NUNCA INVENTADA)"
+              "link": "https://lista.mercadolivre.com.br/[nome-da-peca]-[carro]-[marca]"
             },
             {
               "tipo": "Loja Oficial/Alternativa Segura",
               "preco": 480.00,
               "parcelamento": "em até 12x de R$ 40,00",
               "cupom": "Informar cupom verdadeiro ou Desconto não disponível",
-              "link": "URL VÁLIDA E TESTADA"
+              "link": "https://lista.mercadolivre.com.br/[nome-da-peca]-[carro]-[marca-ou-loja-oficial]"
             }
           ]
         }
