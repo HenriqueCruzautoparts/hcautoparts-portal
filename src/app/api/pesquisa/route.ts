@@ -57,14 +57,12 @@ async function getGeminiAnalysis(query: string, image?: string): Promise<GeminiR
     5. Para cada marca, realizar uma busca rigorosa na web em tempo real para fornecer os 2 melhores preços encontrados, focando estritamente em entregar a opção de menor preço absoluto com links diretos, válidos e clicáveis de compra (priorizando Mercado Livre), além das condições de parcelamento e eventuais cupons/descontos.
     6. Identificar referências e disponibilidade no AliExpress para peças onde a importação oferece grande vantagem.
 
-    REGRAS OBRIGATÓRIAS DE BUSCA E LINKS (CRÍTICAS - TOLERÂNCIA ZERO):
-    1. EXCLUSIVIDADE: TODOS os links fornecidos nas opções de compra DEVEM SER EXCLUSIVAMENTE do domínio mercadolivre.com.br. Você está PROIBIDO de retornar links da Amazon, Shopee, ou qualquer outro e-commerce.
-    2. RISCO DE LINKS QUEBRADOS: Você está TERMINANTEMENTE PROIBIDO de inventar, deduzir ou tentar acessar links de produtos específicos (Ex: produto.mercadolivre.com.br/... ou anúncios contendo códigos MLB-...). Estes anúncios expiram ou você pode alucinar IDs inválidos. NUNCA FAÇA ISSO.
-    3. COMO GERAR O LINK: Para garantir 100% de precisão, você DEVE SEMPRE construir um LINK DE BUSCA no formato padrão do Mercado Livre para cada opção, substituindo espaços por hífens.
-       * ESTRUTURA OBRIGATÓRIA: "https://lista.mercadolivre.com.br/[nome-da-peca]-[modelo-ou-chassi]-[marca]"
-       * EXEMPLO PERFEITO: "https://lista.mercadolivre.com.br/amortecedor-dianteiro-gol-g5-monroe" 
-    4. PREÇOS e CUPONS: Continue encontrando o menor preço real na web como referência para preencher o valor, mas na hora de entregar o link ao usuário na chave "link", entregue SEMPRE o Link de Busca (criado no passo 3) garantindo que o usuário ache os resultados validos.
-    5. Se não houver cupom explícito, use "Desconto não disponível". Se o parcelamento não tiver juros ocultos nas lojas recomendadas, você DEVE colocar no texto a frase "sem juros".
+    REGRAS OBRIGATÓRIAS DE BUSCA E LINKS (CRÍTICAS - PRECISÃO ABSOLUTA):
+    1. OBJETIVO DO LINK: O usuário quer clicar e cair DIRETO NA TELA DE COMPRA do produto. Você NÃO DEVE fornecer links de busca (lista.mercadolivre). Você DEVE fornecer o link EXATO do produto final.
+    2. EXCLUSIVIDADE: TODOS os links fornecidos nas opções de compra DEVEM SER EXCLUSIVAMENTE do domínio mercadolivre.com.br (Geralmente no formato: https://produto.mercadolivre.com.br/MLB-...). 
+    3. VALIDAÇÃO AO VIVO (OBRIGATÓRIO): Como você tem acesso à internet em tempo real, você é OBRIGADO a visitar/pesquisar no Mercado Livre e recuperar a URL verdadeira, ativa e atualizada de hoje do produto MAIS BARATO encontrado para aquela marca.
+    4. PROIBIÇÃO DE ALUCINAÇÃO: Você está TERMINANTEMENTE PROIBIDO de inventar ou chutar códigos MLB. Se você não conseguir achar o link do anúncio exato através e de forma confirmada pela sua busca na web, não invente.
+    5. CUPONS E JUROS: Se não houver cupom explícito na página do anúncio, use "Desconto não disponível". Se o parcelamento exibido no anúncio final não tiver juros, coloque claramente a frase "sem juros".
 
     REGRAS DE FORMATO JSON:
     1. Você DEVE retornar EXCLUSIVAMENTE um objeto JSON válido.
@@ -91,14 +89,14 @@ async function getGeminiAnalysis(query: string, image?: string): Promise<GeminiR
               "preco": 450.00,
               "parcelamento": "em até 10x de R$ 45,00 sem juros",
               "cupom": "Informar cupom verdadeiro ou Desconto não disponível",
-              "link": "https://lista.mercadolivre.com.br/[nome-da-peca]-[carro]-[marca]"
+              "link": "https://produto.mercadolivre.com.br/MLB-123456789-exemplo-valido-do-menor-preco"
             },
             {
               "tipo": "Loja Oficial/Alternativa Segura",
               "preco": 480.00,
               "parcelamento": "em até 12x de R$ 40,00",
               "cupom": "Informar cupom verdadeiro ou Desconto não disponível",
-              "link": "https://lista.mercadolivre.com.br/[nome-da-peca]-[carro]-[marca-ou-loja-oficial]"
+              "link": "https://produto.mercadolivre.com.br/MLB-987654321-exemplo-valido"
             }
           ]
         }
