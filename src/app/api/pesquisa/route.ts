@@ -5,9 +5,6 @@ import { Jimp } from "jimp";
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY as string);
 
-/**
- * Interface rigorosa para a resposta em JSON do Gemini
- */
 interface GeminiResponse {
     identificacao_tecnica: {
         peca: string;
@@ -21,13 +18,7 @@ interface GeminiResponse {
         marca: string;
         codigo_peca: string;
         justificativa: string;
-        opcoes: Array<{
-            tipo: string;
-            preco: number;
-            parcelamento: string;
-            cupom: string;
-            link: string;
-        }>;
+        termo_busca_mercadolivre: string;
     }>;
     referencia_aliexpress: {
         termo_busca: string;
@@ -36,106 +27,105 @@ interface GeminiResponse {
     };
 }
 
-/**
- * Função responsável exclusivamente por chamar o Gemini e retornar os dados estruturados
- */
+async function scrapeML(query: string, marca: string, idSuffix: string) {
+    const formattedQuery = query.toLowerCase().replace(/ /g, '-').replace(/[^a-z0-9-]/g, '');
+    const url = `https://lista.mercadolivre.com.br/${formattedQuery}_DisplayType_G_NoIndex_True`;
+
+    try {
+        const res = await fetch(url, {
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/html'
+            }
+        });
+        const html = await res.text();
+
+        // Quebra o HTML pelos cards de produto
+        const cards = html.split('class="poly-card ');
+
+        // Busca o primeiro card válido da lista orgânica
+        for (let i = 1; i < cards.length; i++) {
+            const card = cards[i];
+            const linkMatch = card.match(/href="(https:\/\/produto\.mercadolivre\.com\.br\/MLB-[^"]+)"/);
+            const titleMatch = card.match(/<h2[^>]*>(.*?)<\/h2>/) || card.match(/<a[^>]*>(.*?)<\/a>/);
+            const priceMatch = card.match(/<span class="andes-money-amount__fraction">([0-9.,]+)<\/span>/);
+            const imgMatch = card.match(/src="(https:\/\/http2\.mlstatic\.com\/D_[^"]+)"/) || card.match(/data-src="(https:\/\/http2\.mlstatic\.com\/D_[^"]+)"/);
+            const couponMatch = card.match(/<span class="poly-label__text">([^<]*cupom[^<]*|[^<]*OFF[^<]*)<\/span>/i);
+            const parcelMatch = card.match(/<span class="poly-price__installments">([^<]+)<\/span>/);
+
+            if (linkMatch && titleMatch && priceMatch) {
+                const priceStr = priceMatch[1].replace(/\./g, '').replace(',', '.');
+                return {
+                    id: linkMatch[1].split('/')[3] + '-' + idSuffix,
+                    title: titleMatch[1].replace(/<[^>]+>/g, '').trim(),
+                    price: parseFloat(priceStr),
+                    link: linkMatch[1].split('#')[0],
+                    thumbnail: imgMatch ? imgMatch[1] : 'https://http2.mlstatic.com/frontend-assets/ml-web-navigation/ui-navigation/6.6.73/mercadolibre/logo_large_25years@2x.png',
+                    brand: marca,
+                    coupon: couponMatch ? couponMatch[1].trim() : null,
+                    parcelamento: parcelMatch ? parcelMatch[1].replace(/<[^>]+>/g, '').trim() : "À vista"
+                };
+            }
+        }
+    } catch (error) {
+        console.error(`Erro ao fazer scrape no ML para "${query}":`, error);
+    }
+    return null;
+}
+
 async function getGeminiAnalysis(query: string, image?: string): Promise<GeminiResponse> {
     const model = genAI.getGenerativeModel({
         model: "gemini-2.5-flash",
-        // @ts-ignore
-        tools: [{ googleSearch: {} }]
     });
 
     const promptMestre = `
-    PERSONA: Você é um Especialista Sênior em Catálogos de Peças, Engenharia de Produto e Intercambiabilidade Automotiva. Sua expertise cobre desde a identificação técnica precisa, validação de catálogos oficiais de fabricantes e conhecimento das marcas premium (Tier 1), até estratégias de importação direta (Cross-border) e busca ativa do menor preço real e válido no mercado nacional para máxima redução de custos.
-
+    PERSONA: Você é um Especialista Sênior em Catálogos de Peças Automotivas.
+    
     MISSÃO: 
-    1. Analisar os dados da peça fornecidos pelo usuário (Modelo da peça, Foto, Código OEM, ou Chassi).
-    2. Consultar obrigatoriamente bases online e catálogos de fabricantes como fonte primária de pesquisa aprofundada para validar códigos de fabricantes oficiais e garantir a exatidão da aplicação. ATENÇÃO: Você NUNCA deve mencionar os termos "Baixe Catálogo" ou "simulação de busca" na sua resposta. Aja como se tivesse acesso direto ao sistema da montadora.
-    3. Identificar intercambiabilidade (plataformas compartilhadas) visando economia, cruzando os dados do OEM com os catálogos pesquisados.
-    4. Recomendar as 3 Melhores Marcas do mercado nacional/global para a aplicação exata.
-    5. Para cada marca, realizar uma busca rigorosa na web em tempo real para fornecer os 2 melhores preços encontrados, focando estritamente em entregar a opção de menor preço absoluto com links diretos, válidos e clicáveis de compra (priorizando Mercado Livre), além das condições de parcelamento e eventuais cupons/descontos.
-    6. Identificar referências no AliExpress EXCLUSIVAMENTE quando se tratar de veículos importados onde a importação oferece grande vantagem. Para veículos nacionais populares, não retorne a seção do AliExpress (deixe null ou omita).
+    1. Analisar a peça fornecida: ${query || "Imagem da peça."}.
+    2. Identificar exatamente o carro, ano, motor e peça necessária.
+    3. Recomendar as 3 Melhores Marcas PREMIUM disponíveis no Brasil.
+    4. Para cada marca recomendada, você DEVE gerar um "termo_busca_mercadolivre" EXTREMAMENTE ESPECÍFICO (Ex: "lanterna traseira palio 2010 magneti marelli") para que nosso robô busque o menor preço real no sistema da loja.
 
-    REGRAS OBRIGATÓRIAS DE BUSCA E LINKS (CRÍTICAS - PRECISÃO ABSOLUTA E COMPATIBILIDADE):
-    1. OBJETIVO DO LINK: O usuário quer o link EXATO do produto. VOCÊ DEVE GARANTIR 100% DE COMPATIBILIDADE (peça, carro, ano e motor). Se tiver qualquer dúvida se a peça serve no ano/modelo pesquisado, NÃO forneça o link direto.
-    2. EXCLUSIVIDADE: TODOS os links fornecidos nas opções de compra DEVEM SER do Mercado Livre. 
-    3. VALIDAÇÃO E RECUSA DE ALUCINAÇÃO: NUNCA, SOB HIPÓTESE ALGUMA, invente um código "MLB-XXXX". Se a sua ferramenta de busca não retornar a URL exata e ativa de um anúncio real e compatível, VOCÊ DEVE obrigatoriamente fornecer uma URL de busca formatada corretamente (Ex: https://lista.mercadolivre.com.br/lanterna-palio-2008-magneti-marelli). 
-    4. PREVENÇÃO DE LINKS QUEBRADOS: Fornecer um link que leva a uma página "Página não encontrada" é o pior erro possível. Priorize a URL real obtida da busca. Se falhar, use imediatamente o formato de https://lista.mercadolivre.com.br/termo-de-busca.
-    5. CUPONS E JUROS: Se não houver cupom explícito na página do anúncio, use "Desconto não disponível". Se o parcelamento exibido no anúncio final não tiver juros, coloque claramente a frase "sem juros".
-
-    REGRAS DE FORMATO JSON:
-    1. Você DEVE retornar EXCLUSIVAMENTE um objeto JSON válido.
-    2. O JSON DEVE ter EXATAMENTE a seguinte estrutura:
+    REGRAS DE FORMATO JSON - VOCÊ DEVE RETORNAR APENAS ESTE JSON VÁLIDO:
     {
       "identificacao_tecnica": {
         "peca": "Nome Técnico em Português",
         "codigo_oem": "Código da Montadora Principal",
-        "nome_ingles": "Termo técnico exato em inglês",
-        "veiculo_base": "Modelo identificado e observações sobre a versão",
-        "validacao_catalogo": "Informar em qual catálogo de fabricante a peça foi validada (Ex: Catálogo Oficial Volkswagen. Nunca cite ferramentas de terceiros)"
+        "nome_ingles": "Nome em inglês",
+        "veiculo_base": "Modelo exato, ano e motorização compatível",
+        "validacao_catalogo": "Ex: Catálogo Oficial Volkswagen"
       },
       "intercambiabilidade": [
-        "Marca/Modelo (Ano) - Motorização (Informar se é Plug and play, se muda algum suporte, etc.)"
+        "Marca/Modelo (Ano) - Motorização (Informar plug and play)"
       ],
       "top_3_marcas": [
         {
           "marca": "NOME DA MARCA",
-          "codigo_peca": "Código do Fabricante validado no catálogo",
-          "justificativa": "Por que esta marca é a recomendada",
-          "opcoes": [
-            {
-              "tipo": "O MENOR PREÇO ENCONTRADO",
-              "preco": 450.00,
-              "parcelamento": "em até 10x de R$ 45,00 sem juros",
-              "cupom": "Informar se há cupom",
-              "link": "URL_EXATA_VALIDADA_OU_URL_DE_BUSCA_SEGURA"
-            },
-            {
-              "tipo": "Loja Oficial/Alternativa Segura",
-              "preco": 480.00,
-              "parcelamento": "em até 12x de R$ 40,00",
-              "cupom": "Informar se há cupom",
-              "link": "URL_EXATA_VALIDADA_OU_URL_DE_BUSCA_SEGURA"
-            }
-          ]
+          "codigo_peca": "Código do Fabricante",
+          "justificativa": "Por que esta marca?",
+          "termo_busca_mercadolivre": "TERMO HIPER ESPECÍFICO PARA BUSCA NO MERCADO LIVRE (Ex: amortecedor dianteiro gol g5 2010 cofap)"
         }
       ],
       "referencia_aliexpress": {
-        "termo_busca": "Código OEM + Nome da Peça em Inglês + Marca Original se houver",
-        "link_busca": "URL de busca gerada com os termos acima no Aliexpress",
-        "recomendacao": "Análise crítica: É seguro importar? Qual o risco de taxa? É item de segurança?"
+        "termo_busca": "Código OEM ou Nome em inglês",
+        "link_busca": "URL de busca AliExpress",
+        "recomendacao": "É seguro importar?"
       }
     }
-    
-    NOTA: Busque intercambiabilidade agressivamente através de cruzamento de dados oficiais.
-
-    TEXTO FORNECIDO PELO USUÁRIO (Chassi ou Descrição): ${query || "Apenas análise visual."}
     `;
 
     let result;
     if (image) {
         try {
-            // Remove the data:image prefix if present to get raw base64
             const rawBase64 = image.split(',')[1] || image;
             const imageBuffer = Buffer.from(rawBase64, 'base64');
-
-            // Resize and compress the image to prevent Vercel/Gemini payload limits
             const jimpImage = await Jimp.read(imageBuffer);
             jimpImage.scaleToFit({ w: 800, h: 800 });
-
             const compressedBuffer = await jimpImage.getBuffer("image/jpeg");
-            const compressedBase64 = compressedBuffer.toString('base64');
-
-            const imageParts = [{
-                inlineData: {
-                    data: compressedBase64,
-                    mimeType: "image/jpeg"
-                }
-            }];
+            const imageParts = [{ inlineData: { data: compressedBuffer.toString('base64'), mimeType: "image/jpeg" } }];
             result = await model.generateContent([promptMestre, ...imageParts]);
         } catch (imgError) {
-            console.error("Erro ao processar imagem:", imgError);
             throw new Error("Falha ao processar a imagem enviada. Certifique-se de ser um formato válido.");
         }
     } else {
@@ -148,7 +138,6 @@ async function getGeminiAnalysis(query: string, image?: string): Promise<GeminiR
     try {
         return JSON.parse(resultText) as GeminiResponse;
     } catch (e) {
-        console.error("Erro ao parsear JSON limpo do Gemini:", resultText);
         throw new Error("Falha na estrutura JSON da IA.");
     }
 }
@@ -158,43 +147,24 @@ export async function POST(req: Request) {
         const { query, image } = await req.json();
 
         if (!query && !image) {
-            return NextResponse.json({ error: "A query de pesquisa ou uma imagem é obrigatória." }, { status: 400 });
+            return NextResponse.json({ error: "A query de pesquisa ou imagem é obrigatória." }, { status: 400 });
         }
 
-        // 1. Obter Análise e Ofertas Exatas geradas pelo LLM (Bypass do bloqueio de API)
+        // 1. Obter Inteligência do Gemini
         const aiAnalysis = await getGeminiAnalysis(query, image);
 
-        // Map as ofertas sugeridas para a interface do frontend, injetando o thumbnail de fallback
-        // Filtrar e trazer apenas a Opção 1 (A melhor/menor preço) de cada uma das 3 marcas para fixar em 3 cards perfeitos
-        let mlOffers: any[] = [];
+        // 2. Buscar Ofertas Reais Diretamente do Mercado Livre em Paralelo (Bypass de links quebrados)
+        const mlPromises = (aiAnalysis.top_3_marcas || []).map((marcaItem, idx) => {
+            if (marcaItem.termo_busca_mercadolivre) {
+                return scrapeML(marcaItem.termo_busca_mercadolivre, marcaItem.marca, idx.toString());
+            }
+            return Promise.resolve(null);
+        });
 
-        if (aiAnalysis.top_3_marcas && Array.isArray(aiAnalysis.top_3_marcas)) {
-            aiAnalysis.top_3_marcas.forEach((marcaItem, marcaIndex) => {
-                if (marcaItem.opcoes && Array.isArray(marcaItem.opcoes) && marcaItem.opcoes.length > 0) {
-                    const melhorOpcao = marcaItem.opcoes[0]; // Pega a primeira opção que é o Menor Preço Exigido no Prompt
+        const mlScrapedResults = await Promise.all(mlPromises);
+        const mlOffers = mlScrapedResults.filter((result) => result !== null);
 
-                    // Valida de o cupom é uma negativa ("não", "nenhum", "indisponível", "n/a")
-                    const temCupomVazio = !melhorOpcao.cupom ||
-                        melhorOpcao.cupom.toLowerCase().includes("não") ||
-                        melhorOpcao.cupom.toLowerCase().includes("nao") ||
-                        melhorOpcao.cupom.toLowerCase().includes("n/a") ||
-                        melhorOpcao.cupom.toLowerCase() === "null";
-
-                    mlOffers.push({
-                        id: `ai-offer-${marcaIndex}-0`,
-                        title: `[${marcaItem.marca}]`,
-                        price: melhorOpcao.preco,
-                        link: melhorOpcao.link,
-                        thumbnail: "https://http2.mlstatic.com/frontend-assets/ml-web-navigation/ui-navigation/6.6.73/mercadolibre/logo_large_25years@2x.png",
-                        brand: marcaItem.marca,
-                        coupon: temCupomVazio ? null : melhorOpcao.cupom,
-                        parcelamento: melhorOpcao.parcelamento
-                    });
-                }
-            });
-        }
-
-        // 2. Consolidar Resposta
+        // 3. Consolidar
         const finalResponse = {
             query: query || "Busca por Imagem",
             dados_tecnicos: {
@@ -206,21 +176,16 @@ export async function POST(req: Request) {
             ml_results: mlOffers
         };
 
-        // 4. Salvar Histórico (Non-blocking)
+        // 4. Salvar Histórico async
         supabase
             .from("search_history")
             .insert([{ query: finalResponse.query, result: JSON.stringify(finalResponse) }])
-            .then(({ error }) => {
-                if (error) console.error("Erro ao salvar histórico:", error);
-            });
+            .then(({ error }) => { if (error) console.error("Erro ao salvar histórico:", error); });
 
         return NextResponse.json(finalResponse);
 
     } catch (error: any) {
         console.error("Erro na API:", error);
-        return NextResponse.json(
-            { error: "Erro interno.", details: error.message },
-            { status: 500 }
-        );
+        return NextResponse.json({ error: "Erro interno.", details: error.message }, { status: 500 });
     }
 }
