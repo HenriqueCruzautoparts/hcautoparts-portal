@@ -61,7 +61,7 @@ async function scrapeML(query: string, marca: string, idSuffix: string) {
             }
         }
 
-        if (jsonPayload) {
+        if (jsonPayload && jsonPayload.offers && jsonPayload.offers.url) {
             return {
                 id: (jsonPayload.sku || 'ml-json') + '-' + idSuffix,
                 title: jsonPayload.name,
@@ -106,7 +106,18 @@ async function scrapeML(query: string, marca: string, idSuffix: string) {
     } catch (error) {
         console.error(`Erro ao fazer scrape no ML para "${query}":`, error);
     }
-    return null;
+
+    // Estratégia 3: Fallback ABSOLUTO - Se o ML bloquear o IP ou não achar nada, retorna a URL de busca direta para o usuário não ficar sem link
+    return {
+        id: 'ml-fallback-' + idSuffix,
+        title: `Ver as melhores ofertas para ${marca}`,
+        price: null,
+        link: url, // Link direto para a página de pesquisa do ML
+        thumbnail: 'https://http2.mlstatic.com/frontend-assets/ml-web-navigation/ui-navigation/6.6.73/mercadolibre/logo_large_25years@2x.png',
+        brand: marca,
+        coupon: null,
+        parcelamento: "Pesquisar Preços"
+    };
 }
 
 async function getGeminiAnalysis(query: string, image?: string): Promise<GeminiResponse> {
