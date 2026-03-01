@@ -57,11 +57,11 @@ async function getGeminiAnalysis(query: string, image?: string): Promise<GeminiR
     5. Para cada marca, realizar uma busca rigorosa na web em tempo real para fornecer os 2 melhores preços encontrados, focando estritamente em entregar a opção de menor preço absoluto com links diretos, válidos e clicáveis de compra (priorizando Mercado Livre), além das condições de parcelamento e eventuais cupons/descontos.
     6. Identificar referências no AliExpress EXCLUSIVAMENTE quando se tratar de veículos importados onde a importação oferece grande vantagem. Para veículos nacionais populares, não retorne a seção do AliExpress (deixe null ou omita).
 
-    REGRAS OBRIGATÓRIAS DE BUSCA E LINKS (CRÍTICAS - PRECISÃO ABSOLUTA):
-    1. OBJETIVO DO LINK: O usuário quer clicar e cair DIRETO NA TELA DE COMPRA do produto. Você NÃO DEVE fornecer links de busca (lista.mercadolivre). Você DEVE fornecer o link EXATO do produto final.
-    2. EXCLUSIVIDADE: TODOS os links fornecidos nas opções de compra DEVEM SER EXCLUSIVAMENTE do domínio mercadolivre.com.br (Geralmente no formato: https://produto.mercadolivre.com.br/MLB-...). 
-    3. VALIDAÇÃO AO VIVO (OBRIGATÓRIO): Como você tem acesso à internet em tempo real, você é OBRIGADO a visitar/pesquisar no Mercado Livre e recuperar a URL verdadeira, ativa e atualizada de hoje do produto MAIS BARATO encontrado para aquela marca.
-    4. PROIBIÇÃO DE ALUCINAÇÃO: Você está TERMINANTEMENTE PROIBIDO de inventar ou chutar códigos MLB. Se você não conseguir achar o link do anúncio exato através e de forma confirmada pela sua busca na web, não invente.
+    REGRAS OBRIGATÓRIAS DE BUSCA E LINKS (CRÍTICAS - PRECISÃO ABSOLUTA E COMPATIBILIDADE):
+    1. OBJETIVO DO LINK: O usuário quer o link EXATO do produto. VOCÊ DEVE GARANTIR 100% DE COMPATIBILIDADE (peça, carro, ano e motor). Se tiver qualquer dúvida se a peça serve no ano/modelo pesquisado, NÃO forneça o link direto.
+    2. EXCLUSIVIDADE: TODOS os links fornecidos nas opções de compra DEVEM SER do Mercado Livre. 
+    3. VALIDAÇÃO E RECUSA DE ALUCINAÇÃO: NUNCA, SOB HIPÓTESE ALGUMA, invente um código "MLB-XXXX". Se a sua ferramenta de busca não retornar a URL exata e ativa de um anúncio real e compatível, VOCÊ DEVE obrigatoriamente fornecer uma URL de busca formatada corretamente (Ex: https://lista.mercadolivre.com.br/lanterna-palio-2008-magneti-marelli). 
+    4. PREVENÇÃO DE LINKS QUEBRADOS: Fornecer um link que leva a uma página "Página não encontrada" é o pior erro possível. Priorize a URL real obtida da busca. Se falhar, use imediatamente o formato de https://lista.mercadolivre.com.br/termo-de-busca.
     5. CUPONS E JUROS: Se não houver cupom explícito na página do anúncio, use "Desconto não disponível". Se o parcelamento exibido no anúncio final não tiver juros, coloque claramente a frase "sem juros".
 
     REGRAS DE FORMATO JSON:
@@ -88,15 +88,15 @@ async function getGeminiAnalysis(query: string, image?: string): Promise<GeminiR
               "tipo": "O MENOR PREÇO ENCONTRADO",
               "preco": 450.00,
               "parcelamento": "em até 10x de R$ 45,00 sem juros",
-              "cupom": "Informar cupom verdadeiro ou Desconto não disponível",
-              "link": "https://produto.mercadolivre.com.br/MLB-123456789-exemplo-valido-do-menor-preco"
+              "cupom": "Informar se há cupom",
+              "link": "URL_EXATA_VALIDADA_OU_URL_DE_BUSCA_SEGURA"
             },
             {
               "tipo": "Loja Oficial/Alternativa Segura",
               "preco": 480.00,
               "parcelamento": "em até 12x de R$ 40,00",
-              "cupom": "Informar cupom verdadeiro ou Desconto não disponível",
-              "link": "https://produto.mercadolivre.com.br/MLB-987654321-exemplo-valido"
+              "cupom": "Informar se há cupom",
+              "link": "URL_EXATA_VALIDADA_OU_URL_DE_BUSCA_SEGURA"
             }
           ]
         }
