@@ -316,6 +316,26 @@ export default function Home() {
                     </ul>
                   </div>
 
+                  {/* Top 3 Marcas */}
+                  {result.dados_tecnicos.top_3_marcas && result.dados_tecnicos.top_3_marcas.length > 0 && (
+                    <div>
+                      <h3 className="text-xl font-bold text-white mb-4 border-b border-white/10 pb-2">⭐ Top 3 Melhores Marcas (Recomendação IA)</h3>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        {result.dados_tecnicos.top_3_marcas.map((marcaItem: any, idx: number) => (
+                          <div key={idx} className="bg-[#2C2C2E]/60 border border-white/10 rounded-2xl p-4 flex flex-col h-full">
+                            <h4 className="text-lg font-bold text-[#FF2D55] mb-1">{marcaItem.marca}</h4>
+                            <p className="text-sm text-white mb-3">
+                              <span className="font-semibold text-[#8E8E93]">Código:</span> {marcaItem.codigo_peca}
+                            </p>
+                            <p className="text-sm text-[#E5E5EA] flex-grow">
+                              {marcaItem.justificativa}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   {/* Referência AliExpress */}
                   {result.dados_tecnicos.referencia_aliexpress && (
                     <div className="bg-[#FFCC00]/5 border border-[#FFCC00]/20 p-5 rounded-2xl mt-6">

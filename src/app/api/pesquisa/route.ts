@@ -40,26 +40,61 @@ async function scrapeML(query: string, marca: string, idSuffix: string) {
         });
         const html = await res.text();
 
-        // Quebra o HTML pelos cards de produto
-        const cards = html.split('class="poly-card ');
+        // Estratégia 1: Tenta o Fallback do LD+JSON Graph (Funciona para páginas ofuscadas de resultados)
+        const scriptRegex = /<script\b[^>]*>([\s\S]*?)<\/script>/g;
+        let scriptMatch;
+        let jsonPayload = null;
 
-        // Busca o primeiro card válido da lista orgânica
-        for (let i = 1; i < cards.length; i++) {
-            const card = cards[i];
-            const linkMatch = card.match(/href="(https:\/\/produto\.mercadolivre\.com\.br\/MLB-[^"]+)"/);
-            const titleMatch = card.match(/<h2[^>]*>(.*?)<\/h2>/) || card.match(/<a[^>]*>(.*?)<\/a>/);
-            const priceMatch = card.match(/<span class="andes-money-amount__fraction">([0-9.,]+)<\/span>/);
-            const imgMatch = card.match(/src="(https:\/\/http2\.mlstatic\.com\/D_[^"]+)"/) || card.match(/data-src="(https:\/\/http2\.mlstatic\.com\/D_[^"]+)"/);
-            const couponMatch = card.match(/<span class="poly-label__text">([^<]*cupom[^<]*|[^<]*OFF[^<]*)<\/span>/i);
-            const parcelMatch = card.match(/<span class="poly-price__installments">([^<]+)<\/span>/);
+        while ((scriptMatch = scriptRegex.exec(html)) !== null) {
+            // Mercado Livre injeta os produtos em um schema.org Graph Array
+            if (scriptMatch[1].includes('"@graph"') && scriptMatch[1].includes('"Product"')) {
+                try {
+                    const parsed = JSON.parse(scriptMatch[1]);
+                    if (parsed['@graph']) {
+                        const products = parsed['@graph'].filter((x: any) => x['@type'] === 'Product' && x.offers && x.offers.price);
+                        if (products.length > 0) {
+                            jsonPayload = products[0];
+                            break;
+                        }
+                    }
+                } catch (e) { }
+            }
+        }
 
-            if (linkMatch && titleMatch && priceMatch) {
-                const priceStr = priceMatch[1].replace(/\./g, '').replace(',', '.');
+        if (jsonPayload) {
+            return {
+                id: (jsonPayload.sku || 'ml-json') + '-' + idSuffix,
+                title: jsonPayload.name,
+                price: parseFloat(jsonPayload.offers.price),
+                link: jsonPayload.offers.url.split('?')[0].split('#')[0],
+                thumbnail: jsonPayload.image || 'https://http2.mlstatic.com/frontend-assets/ml-web-navigation/ui-navigation/6.6.73/mercadolibre/logo_large_25years@2x.png',
+                brand: marca,
+                coupon: null,
+                parcelamento: "Ver na loja"
+            };
+        }
+
+        // Estratégia 2: Regex Universal Baseado em Links de ID (Funciona para listas padrão)
+        const rx = /href="(https:\/\/[^"]*mercadolivre\.com\.br\/MLB-[^"]+)"/g;
+        let m;
+        while ((m = rx.exec(html)) !== null) {
+            const rawLink = m[1];
+            const cleanLink = rawLink.split('#')[0].split('?')[0];
+            const idx = m.index;
+            const block = html.substring(Math.max(0, idx - 800), Math.min(html.length, idx + 1500));
+
+            const titleMatch = block.match(/<h2[^>]*>(.*?)<\/h2>/) || block.match(/alt="([^"]+)"/) || block.match(/title="([^"]+)"/);
+            const priceMatch = block.match(/<span class="andes-money-amount__fraction">([0-9.,]+)<\/span>/);
+            const imgMatch = block.match(/src="(https:\/\/http2\.mlstatic\.com\/D_[^"]+)"/) || block.match(/data-src="(https:\/\/http2\.mlstatic\.com\/D_[^"]+)"/);
+            const couponMatch = block.match(/<span class="poly-label__text">([^<]*cupom[^<]*|[^<]*OFF[^<]*)<\/span>/i);
+            const parcelMatch = block.match(/<span class="poly-price__installments">([^<]+)<\/span>/);
+
+            if (priceMatch && titleMatch) {
                 return {
-                    id: linkMatch[1].split('/')[3] + '-' + idSuffix,
+                    id: cleanLink.split('/')[3] + '-' + idSuffix,
                     title: titleMatch[1].replace(/<[^>]+>/g, '').trim(),
-                    price: parseFloat(priceStr),
-                    link: linkMatch[1].split('#')[0],
+                    price: parseFloat(priceMatch[1].replace(/\./g, '').replace(',', '.')),
+                    link: cleanLink,
                     thumbnail: imgMatch ? imgMatch[1] : 'https://http2.mlstatic.com/frontend-assets/ml-web-navigation/ui-navigation/6.6.73/mercadolibre/logo_large_25years@2x.png',
                     brand: marca,
                     coupon: couponMatch ? couponMatch[1].trim() : null,
@@ -67,6 +102,7 @@ async function scrapeML(query: string, marca: string, idSuffix: string) {
                 };
             }
         }
+
     } catch (error) {
         console.error(`Erro ao fazer scrape no ML para "${query}":`, error);
     }
@@ -86,14 +122,15 @@ async function getGeminiAnalysis(query: string, image?: string): Promise<GeminiR
     2. Identificar exatamente o carro, ano, motor e peça necessária.
     3. Recomendar as 3 Melhores Marcas PREMIUM disponíveis no Brasil.
     4. Para cada marca recomendada, você DEVE gerar um "termo_busca_mercadolivre" EXTREMAMENTE ESPECÍFICO (Ex: "lanterna traseira palio 2010 magneti marelli") para que nosso robô busque o menor preço real no sistema da loja.
+    5. CRÍTICO: RETORNE TODAS AS INFORMAÇÕES, DESCRIÇÕES E JUSTIFICATIVAS EXCLUSIVAMENTE EM PORTUGUÊS DO BRASIL (PT-BR).
 
     REGRAS DE FORMATO JSON - VOCÊ DEVE RETORNAR APENAS ESTE JSON VÁLIDO:
     {
       "identificacao_tecnica": {
-        "peca": "Nome Técnico em Português",
+        "peca": "Nome Técnico Exato em Português",
         "codigo_oem": "Código da Montadora Principal",
-        "nome_ingles": "Nome em inglês",
-        "veiculo_base": "Modelo exato, ano e motorização compatível",
+        "nome_ingles": "Nome da peça em inglês (Apenas neste campo)",
+        "veiculo_base": "Modelo exato, ano e motorização compatível (em português)",
         "validacao_catalogo": "Ex: Catálogo Oficial Volkswagen"
       },
       "intercambiabilidade": [
