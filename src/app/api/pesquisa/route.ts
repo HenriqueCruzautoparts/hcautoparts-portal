@@ -27,7 +27,6 @@ interface GeminiResponse {
         link_busca: string;
         recomendacao: string;
     };
-    comparativo_custo_beneficio: string;
 }
 
 async function scrapeML(query: string, marca: string, idSuffix: string, expectedPartName: string) {
@@ -150,8 +149,7 @@ async function getGeminiAnalysis(query: string, image?: string): Promise<GeminiR
     3. Recomendar as 3 Melhores Marcas PREMIUM disponíveis no Brasil para essa peça EXATA.
     4. Para cada marca recomendada, você DEVE gerar um "termo_busca_mercadolivre" EXTREMAMENTE ESPECÍFICO (Ex: "lanterna traseira palio 2010 magneti marelli") focando em Lojas Confiáveis, opção de Parcelamento sem Juros e Frete Grátis.
     5. Forneça um "breve_explicativo" sobre a função e importância dessa peça específica.
-    6. Gere um "comparativo_custo_beneficio" avaliando se vale a pena comprar a peça original vs marcas paralelas de alta qualidade, visando sempre ECONOMIZAR E TRAZER QUALIDADE para o usuário.
-    7. CRÍTICO: RETORNE TODAS AS INFORMAÇÕES, DESCRIÇÕES E JUSTIFICATIVAS EXCLUSIVAMENTE EM PORTUGUÊS DO BRASIL (PT-BR).
+    6. CRÍTICO: RETORNE TODAS AS INFORMAÇÕES, DESCRIÇÕES E JUSTIFICATIVAS EXCLUSIVAMENTE EM PORTUGUÊS DO BRASIL (PT-BR).
 
     REGRAS DE FORMATO JSON - VOCÊ DEVE RETORNAR APENAS ESTE JSON VÁLIDO:
     {
@@ -178,8 +176,7 @@ async function getGeminiAnalysis(query: string, image?: string): Promise<GeminiR
         "termo_busca": "Código OEM ou Nome em inglês",
         "link_busca": "URL de busca AliExpress",
         "recomendacao": "É seguro importar?"
-      },
-      "comparativo_custo_beneficio": "Comparativo detalhado considerando lojas confiáveis, parcelamento, frete e qualidade visando economia."
+      }
     }
     `;
 
@@ -240,8 +237,7 @@ export async function POST(req: Request) {
                 identificacao_tecnica: aiAnalysis.identificacao_tecnica,
                 intercambiabilidade: aiAnalysis.intercambiabilidade,
                 top_3_marcas: aiAnalysis.top_3_marcas,
-                referencia_aliexpress: aiAnalysis.referencia_aliexpress,
-                comparativo_custo_beneficio: aiAnalysis.comparativo_custo_beneficio
+                referencia_aliexpress: aiAnalysis.referencia_aliexpress
             },
             ml_results: mlOffers
         };

@@ -488,19 +488,6 @@ export default function Home() {
                     </ul>
                   </div>
 
-                  {/* Comparativo de Custo Benefício */}
-                  {result.dados_tecnicos.comparativo_custo_beneficio && (
-                    <div>
-                      <h3 className="text-xl font-bold text-white mb-4 border-b border-white/10 pb-2">💡 Comparativo Custo-Benefício</h3>
-                      <div className="p-5 rounded-2xl bg-[#34C759]/10 border border-[#34C759]/20 shadow-sm relative overflow-hidden">
-                        <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-[#34C759]"></div>
-                        <p className="text-[#E5E5EA] text-[15px] leading-relaxed">
-                          {result.dados_tecnicos.comparativo_custo_beneficio}
-                        </p>
-                      </div>
-                    </div>
-                  )}
-
                   {/* Top 3 Marcas */}
                   {result.dados_tecnicos.top_3_marcas && result.dados_tecnicos.top_3_marcas.length > 0 && (
                     <div>

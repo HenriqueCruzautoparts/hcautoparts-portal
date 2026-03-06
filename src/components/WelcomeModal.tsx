@@ -69,7 +69,6 @@ export function WelcomeModal() {
                                 <li>Digite o nome ou código da peça, ou pesquise pelo chassi do veículo.</li>
                                 <li>Nossa IA analisa e descobre a peça exata.</li>
                                 <li>Apresentamos as 3 Melhores Ofertas reais.</li>
-                                <li>Mostramos um comparativo de Custo-Benefício.</li>
                             </ul>
                         </div>
 
