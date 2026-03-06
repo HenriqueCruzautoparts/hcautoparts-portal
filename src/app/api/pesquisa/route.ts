@@ -1,7 +1,8 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
-import { Jimp } from "jimp";
+
+export const maxDuration = 60; // Allow Vercel to run this function for up to 60 seconds (prevents 504 Timeout)
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY as string);
 
@@ -185,12 +186,9 @@ async function getGeminiAnalysis(query: string, image?: string): Promise<GeminiR
     let result;
     if (image) {
         try {
+            // A imagem já vem comprimida do frontend (Canvas client-side)
             const rawBase64 = image.split(',')[1] || image;
-            const imageBuffer = Buffer.from(rawBase64, 'base64');
-            const jimpImage = await Jimp.read(imageBuffer);
-            jimpImage.scaleToFit({ w: 800, h: 800 });
-            const compressedBuffer = await jimpImage.getBuffer("image/jpeg");
-            const imageParts = [{ inlineData: { data: compressedBuffer.toString('base64'), mimeType: "image/jpeg" } }];
+            const imageParts = [{ inlineData: { data: rawBase64, mimeType: "image/jpeg" } }];
             result = await model.generateContent([promptMestre, ...imageParts]);
         } catch (imgError) {
             throw new Error("Falha ao processar a imagem enviada. Certifique-se de ser um formato válido.");
