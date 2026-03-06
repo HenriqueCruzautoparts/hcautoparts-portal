@@ -1,13 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Search, LayoutDashboard, Activity, CheckCircle2, ImagePlus, Camera, X, LogIn, LogOut, User, Headset } from 'lucide-react';
+import { useState } from 'react';
+import { Search, LayoutDashboard, Activity, CheckCircle2, ImagePlus, X } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { SearchHistory } from '@/components/SearchHistory';
-import { WelcomeModal } from '@/components/WelcomeModal';
-import { supabase } from '@/lib/supabase';
-import Link from 'next/link';
 
 export default function Home() {
   const [query, setQuery] = useState('');
@@ -16,35 +13,6 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [imageBase64, setImageBase64] = useState<string | null>(null);
-  const [user, setUser] = useState<any | null>(null);
-  const [profile, setProfile] = useState<any | null>(null);
-
-  useEffect(() => {
-    const fetchProfile = async (userId: string) => {
-      const { data } = await supabase.from('profiles').select('full_name').eq('id', userId).single();
-      setProfile(data);
-    };
-
-    // Check initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
-      if (session?.user) fetchProfile(session.user.id);
-      else setProfile(null);
-    });
-
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
-      if (session?.user) fetchProfile(session.user.id);
-      else setProfile(null);
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
-
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-  };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -101,18 +69,6 @@ export default function Home() {
       setResult(data);
     } catch (err: any) {
       setError(err.message);
-
-      // Enviar log silenciosamente
-      fetch('/api/logger', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          error_message: err.message,
-          context: { origin: 'frontend_search_submit', query },
-          user_id: user?.id
-        })
-      }).catch(() => { });
-
     } finally {
       setLoading(false);
     }
@@ -142,54 +98,7 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-black text-white font-sans selection:bg-[#FF2D55]/30">
-      <main className="relative z-10 container mx-auto px-4 sm:px-6 py-8 md:py-12 max-w-5xl">
-
-        {/* Top Navbar */}
-        <div className="w-full flex justify-end items-center mb-6 h-12">
-          {user ? (
-            <div className="flex items-center space-x-1 sm:space-x-3 bg-[#1C1C1E]/60 backdrop-blur-md border border-white/10 rounded-full pl-3 pr-1 py-1 sm:pl-4 sm:pr-1.5 sm:py-1.5 shadow-sm overflow-hidden max-w-full">
-              <Link href="/perfil" className="flex items-center space-x-1.5 sm:space-x-2 text-[#E5E5EA] text-[13px] sm:text-[15px] font-medium hover:text-white transition-colors cursor-pointer mr-0 sm:mr-1 shrink">
-                <User className="w-4 h-4 text-[#FF2D55] shrink-0" />
-                <span className="max-w-[80px] sm:max-w-[150px] truncate">{profile?.full_name || user.email}</span>
-              </Link>
-              <div className="w-[1px] h-4 bg-white/10 shrink-0" />
-              <Link
-                href="/suporte"
-                className="flex items-center justify-center p-1.5 sm:p-2 rounded-full hover:bg-white/10 text-[#8E8E93] hover:text-white transition-colors shrink-0"
-                title="Suporte"
-              >
-                <Headset className="w-4 h-4 sm:w-4 sm:h-4" />
-              </Link>
-              <button
-                onClick={handleLogout}
-                className="flex items-center justify-center p-1.5 sm:p-2 rounded-full hover:bg-[#FF3B30]/20 hover:text-[#FF3B30] text-[#8E8E93] transition-colors shrink-0"
-                title="Sair"
-              >
-                <LogOut className="w-4 h-4 sm:w-4 sm:h-4" />
-              </button>
-            </div>
-          ) : (
-            <div className="flex items-center space-x-2">
-              <Link
-                href="/suporte"
-                className="flex items-center justify-center p-2 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 text-[#8E8E93] hover:text-white transition-colors"
-                title="Suporte"
-              >
-                <Headset className="w-5 h-5" />
-              </Link>
-              <Link
-                href="/login"
-                className="flex items-center space-x-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-full px-4 py-2 sm:px-5 sm:py-2 transition-colors text-white text-[14px] sm:text-[15px] font-medium"
-              >
-                <LogIn className="w-4 h-4 text-[#FF2D55]" />
-                <span>Entrar</span>
-              </Link>
-            </div>
-          )}
-        </div>
-
-        {/* Global Modals */}
-        <WelcomeModal />
+      <main className="relative z-10 container mx-auto px-4 sm:px-6 py-8 md:py-16 max-w-5xl">
 
         {/* Header Section */}
         <div className="flex flex-col items-center justify-center text-center mb-10 space-y-3">
@@ -234,7 +143,7 @@ export default function Home() {
                 <Search className="w-5 h-5 text-[#8E8E93]" />
               </div>
 
-              <label className="cursor-pointer p-2 rounded-full hover:bg-white/5 transition-colors group relative" title="Upload Galeria">
+              <label className="cursor-pointer p-2 rounded-full hover:bg-white/5 transition-colors group relative">
                 <input
                   type="file"
                   accept="image/*"
@@ -245,22 +154,10 @@ export default function Home() {
                 <ImagePlus className="w-5 h-5 text-[#8E8E93] group-hover:text-[#FF2D55] transition-colors" />
               </label>
 
-              <label className="cursor-pointer p-2 rounded-full hover:bg-white/5 transition-colors group relative" title="Tirar Foto">
-                <input
-                  type="file"
-                  accept="image/*"
-                  capture="environment"
-                  className="hidden"
-                  onChange={handleImageUpload}
-                  disabled={loading}
-                />
-                <Camera className="w-5 h-5 text-[#8E8E93] group-hover:text-[#FF2D55] transition-colors" />
-              </label>
-
               <input
                 type="text"
                 className="flex-1 bg-transparent border-none outline-none text-white px-2 py-3 text-[17px] placeholder:text-[#8E8E93]"
-                placeholder="Nome ou código da peça, ou chassi do veículo..."
+                placeholder="Chassi, código OEM ou descrição da peça..."
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 disabled={loading}
@@ -295,50 +192,13 @@ export default function Home() {
           </div>
         )}
 
-        {/* Loading State - iOS Style Skeletons */}
+        {/* Loading State */}
         {loading && (
-          <div className="animate-in fade-in duration-500 max-w-4xl mx-auto space-y-8 w-full mt-8">
-            {/* Skeleton ML Offers */}
-            <div className="rounded-[32px] bg-[#1C1C1E]/60 backdrop-blur-xl border border-white/10 p-6 md:p-8 shadow-[0_8px_30px_rgb(0,0,0,0.5)]">
-              <div className="flex items-center mb-6">
-                <div className="w-8 h-8 rounded-full bg-white/5 animate-pulse mr-3" />
-                <div className="h-6 w-48 bg-white/5 rounded-lg animate-pulse" />
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
-                {[1, 2, 3].map((i) => (
-                  <div key={i} className="flex flex-col rounded-2xl bg-[#2C2C2E]/50 border border-white/5 overflow-hidden h-72 animate-pulse">
-                    <div className="h-40 w-full bg-white/5" />
-                    <div className="p-4 flex flex-col flex-grow justify-between">
-                      <div className="space-y-2">
-                        <div className="h-4 w-full bg-white/5 rounded" />
-                        <div className="h-4 w-3/4 bg-white/5 rounded" />
-                      </div>
-                      <div className="h-8 w-24 bg-white/5 rounded mt-4" />
-                      <div className="h-10 w-full bg-white/5 rounded-xl mt-3" />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Skeleton Technical Analysis */}
-            <div className="rounded-[32px] bg-[#1C1C1E]/60 backdrop-blur-xl border border-white/10 p-6 md:p-10 shadow-[0_8px_30px_rgb(0,0,0,0.5)]">
-              <div className="flex items-center space-x-3 mb-6 pb-6 border-b border-white/10">
-                <div className="w-12 h-12 rounded-2xl bg-white/5 animate-pulse" />
-                <div className="space-y-2">
-                  <div className="h-6 w-56 bg-white/5 rounded-lg animate-pulse" />
-                  <div className="h-4 w-32 bg-white/5 rounded animate-pulse" />
-                </div>
-              </div>
-              <div className="space-y-6">
-                <div className="h-5 w-40 bg-white/5 rounded animate-pulse mb-4" />
-                <div className="space-y-3">
-                  {[1, 2, 3, 4, 5].map((i) => (
-                    <div key={i} className="h-4 w-full max-w-md bg-white/5 rounded animate-pulse" />
-                  ))}
-                </div>
-              </div>
-            </div>
+          <div className="flex flex-col items-center justify-center space-y-4 animate-in fade-in duration-500 py-12">
+            <div className="w-8 h-8 border-4 border-[#FF2D55]/20 border-t-[#FF2D55] rounded-full animate-spin" />
+            <p className="text-[#8E8E93] font-medium text-[15px]">
+              Buscando informações e catálogos...
+            </p>
           </div>
         )}
 
@@ -437,12 +297,6 @@ export default function Home() {
                   {/* Identificação Técnica */}
                   <div>
                     <h3 className="text-xl font-bold text-white mb-4 border-b border-white/10 pb-2">🛠️ Identificação Técnica</h3>
-                    {result.dados_tecnicos.identificacao_tecnica.breve_explicativo && (
-                      <div className="mb-4 p-4 rounded-xl bg-[#2C2C2E]/40 border border-[#FF2D55]/10 text-[#E5E5EA] text-[15px] leading-relaxed italic relative overflow-hidden">
-                        <div className="absolute left-0 top-0 bottom-0 w-1 bg-[#FF2D55]/50"></div>
-                        {result.dados_tecnicos.identificacao_tecnica.breve_explicativo}
-                      </div>
-                    )}
                     <ul className="space-y-2">
                       <li><strong className="text-white">Peça:</strong> {result.dados_tecnicos.identificacao_tecnica.peca}</li>
                       <li><strong className="text-white">Código OEM:</strong> {result.dados_tecnicos.identificacao_tecnica.codigo_oem}</li>
@@ -461,19 +315,6 @@ export default function Home() {
                       ))}
                     </ul>
                   </div>
-
-                  {/* Comparativo de Custo Benefício */}
-                  {result.dados_tecnicos.comparativo_custo_beneficio && (
-                    <div>
-                      <h3 className="text-xl font-bold text-white mb-4 border-b border-white/10 pb-2">💡 Comparativo Custo-Benefício</h3>
-                      <div className="p-5 rounded-2xl bg-[#34C759]/10 border border-[#34C759]/20 shadow-sm relative overflow-hidden">
-                        <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-[#34C759]"></div>
-                        <p className="text-[#E5E5EA] text-[15px] leading-relaxed">
-                          {result.dados_tecnicos.comparativo_custo_beneficio}
-                        </p>
-                      </div>
-                    </div>
-                  )}
 
                   {/* Top 3 Marcas */}
                   {result.dados_tecnicos.top_3_marcas && result.dados_tecnicos.top_3_marcas.length > 0 && (

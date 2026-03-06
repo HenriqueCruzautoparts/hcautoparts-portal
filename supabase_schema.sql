@@ -1,5 +1,5 @@
 -- Criação da tabela de histórico de pesquisa
-CREATE TABLE public.search_history (
+CREATE TABLE IF NOT EXISTS public.search_history (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
     query TEXT NOT NULL,
@@ -9,10 +9,60 @@ CREATE TABLE public.search_history (
 -- Configurar RLS (Row Level Security) para permitir que a chave anônima insira e leia
 ALTER TABLE public.search_history ENABLE ROW LEVEL SECURITY;
 
--- Política para permitir inserção sem autenticação
-CREATE POLICY "Allow anonymous inserts" ON public.search_history
-    FOR INSERT WITH CHECK (true);
+DO $$ BEGIN
+    -- Política para permitir inserção sem autenticação
+    CREATE POLICY "Allow anonymous inserts" ON public.search_history
+        FOR INSERT WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN null; END $$;
 
--- Política para permitir leitura sem autenticação
-CREATE POLICY "Allow anonymous reads" ON public.search_history
-    FOR SELECT USING (true);
+DO $$ BEGIN
+    -- Política para permitir leitura sem autenticação
+    CREATE POLICY "Allow anonymous reads" ON public.search_history
+        FOR SELECT USING (true);
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+-- Criação da tabela de Perfis do Usuário (SaaS)
+CREATE TABLE IF NOT EXISTS public.profiles (
+    id UUID REFERENCES auth.users(id) ON DELETE CASCADE PRIMARY KEY,
+    full_name TEXT NOT NULL,
+    whatsapp TEXT,
+    cep TEXT,
+    address TEXT,
+    address_number TEXT,
+    address_complement TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- Configurar RLS
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+
+-- Políticas
+DO $$ BEGIN
+    CREATE POLICY "Users can view own profile" ON public.profiles FOR SELECT USING (auth.uid() = id);
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+DO $$ BEGIN
+    CREATE POLICY "Users can update own profile" ON public.profiles FOR UPDATE USING (auth.uid() = id);
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+DO $$ BEGIN
+    CREATE POLICY "Users can insert own profile" ON public.profiles FOR INSERT WITH CHECK (auth.uid() = id);
+EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+-- Criação da tabela de Logs do Sistema (Erros)
+CREATE TABLE IF NOT EXISTS public.system_errors (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+    error_message TEXT NOT NULL,
+    context JSONB,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- Configurar RLS
+ALTER TABLE public.system_errors ENABLE ROW LEVEL SECURITY;
+
+-- Política para permitir que o sistema (anônimo ou logado) insira logs
+DO $$ BEGIN
+    CREATE POLICY "Allow inserts to system_errors" ON public.system_errors
+        FOR INSERT WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN null; END $$;

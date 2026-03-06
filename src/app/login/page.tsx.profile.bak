@@ -1,0 +1,164 @@
+'use client';
+
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { LayoutDashboard, Lock, Mail, ArrowRight, Loader2 } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
+import Link from 'next/link';
+
+export default function LoginPage() {
+    const router = useRouter();
+    const [isLogin, setIsLogin] = useState(true);
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [message, setMessage] = useState<string | null>(null);
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setLoading(true);
+        setError(null);
+        setMessage(null);
+
+        try {
+            if (isLogin) {
+                const { error } = await supabase.auth.signInWithPassword({
+                    email,
+                    password,
+                });
+                if (error) throw error;
+                router.push('/');
+            } else {
+                const { error } = await supabase.auth.signUp({
+                    email,
+                    password,
+                    options: {
+                        emailRedirectTo: `${window.location.origin}/login`,
+                    },
+                });
+                if (error) throw error;
+                setMessage('Cadastro realizado com sucesso! Verifique seu e-mail ou faça login (se e-mail não exigir confirmação nesta configuração).');
+                setIsLogin(true); // Switch to login view
+            }
+        } catch (err: any) {
+            setError(err.message || 'Ocorreu um erro durante a autenticação.');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <div className="min-h-screen bg-black text-white font-sans flex flex-col items-center justify-center p-4 selection:bg-[#FF2D55]/30 relative overflow-hidden">
+            {/* Decorative Blob */}
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-[#FF2D55] opacity-[0.03] rounded-full blur-3xl pointer-events-none" />
+
+            <div className="z-10 w-full max-w-[400px]">
+                {/* Header */}
+                <div className="flex flex-col items-center justify-center text-center mb-10">
+                    <Link href="/" className="inline-flex items-center justify-center p-3 mb-6 rounded-2xl bg-[#1C1C1E] border border-white/5 shadow-sm backdrop-blur-md hover:bg-white/5 transition-colors group cursor-pointer">
+                        <LayoutDashboard className="w-8 h-8 text-[#FF2D55] group-hover:scale-110 transition-transform" />
+                    </Link>
+                    <h1 className="text-3xl font-bold tracking-tight text-white mb-2">
+                        {isLogin ? 'Bem-vindo de volta' : 'Crie sua conta'}
+                    </h1>
+                    <p className="text-[15px] text-[#8E8E93]">
+                        {isLogin
+                            ? 'Entre para acessar seu histórico de peças.'
+                            : 'Junte-se para salvar pesquisas e gerenciar as melhores ofertas.'}
+                    </p>
+                </div>
+
+                {/* Auth Card */}
+                <div className="bg-[#1C1C1E]/60 backdrop-blur-2xl border border-white/10 rounded-[32px] p-8 shadow-[0_8px_30px_rgb(0,0,0,0.5)]">
+                    <form onSubmit={handleSubmit} className="space-y-5">
+                        {/* Email Input */}
+                        <div>
+                            <label className="block text-sm font-medium text-[#E5E5EA] mb-2 px-1">
+                                E-mail
+                            </label>
+                            <div className="relative group">
+                                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                    <Mail className="h-5 w-5 text-[#8E8E93] group-focus-within:text-[#FF2D55] transition-colors" />
+                                </div>
+                                <input
+                                    type="email"
+                                    value={email}
+                                    onChange={(e) => setEmail(e.target.value)}
+                                    required
+                                    placeholder="seu@email.com"
+                                    className="w-full bg-[#2C2C2E]/50 border border-white/10 rounded-2xl pl-12 pr-4 py-3.5 text-white placeholder:text-[#8E8E93] focus:outline-none focus:ring-2 focus:ring-[#FF2D55]/50 focus:border-transparent transition-all"
+                                />
+                            </div>
+                        </div>
+
+                        {/* Password Input */}
+                        <div>
+                            <label className="block text-sm font-medium text-[#E5E5EA] mb-2 px-1">
+                                Senha
+                            </label>
+                            <div className="relative group">
+                                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                    <Lock className="h-5 w-5 text-[#8E8E93] group-focus-within:text-[#FF2D55] transition-colors" />
+                                </div>
+                                <input
+                                    type="password"
+                                    value={password}
+                                    onChange={(e) => setPassword(e.target.value)}
+                                    required
+                                    placeholder="••••••••"
+                                    className="w-full bg-[#2C2C2E]/50 border border-white/10 rounded-2xl pl-12 pr-4 py-3.5 text-white placeholder:text-[#8E8E93] focus:outline-none focus:ring-2 focus:ring-[#FF2D55]/50 focus:border-transparent transition-all"
+                                />
+                            </div>
+                        </div>
+
+                        {/* Error/Success Messages */}
+                        {error && (
+                            <div className="p-3.5 rounded-xl bg-[#FF3B30]/10 border border-[#FF3B30]/20 text-[#FF3B30] text-[14px] leading-snug">
+                                {error}
+                            </div>
+                        )}
+                        {message && (
+                            <div className="p-3.5 rounded-xl bg-[#34C759]/10 border border-[#34C759]/20 text-[#34C759] text-[14px] leading-snug">
+                                {message}
+                            </div>
+                        )}
+
+                        {/* Submit Button */}
+                        <button
+                            type="submit"
+                            disabled={loading}
+                            className="w-full flex items-center justify-center bg-[#FF2D55] hover:bg-[#FF3B30] text-white rounded-2xl p-4 font-semibold text-[16px] transition-all duration-300 transform active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_4px_14px_0_rgba(255,45,85,0.39)] mt-6"
+                        >
+                            {loading ? (
+                                <Loader2 className="w-5 h-5 animate-spin" />
+                            ) : (
+                                <>
+                                    {isLogin ? 'Entrar no Sistema' : 'Criar minha conta'}
+                                    <ArrowRight className="w-5 h-5 ml-2" />
+                                </>
+                            )}
+                        </button>
+                    </form>
+
+                    {/* Toggle View */}
+                    <div className="mt-8 text-center text-[15px]">
+                        <span className="text-[#8E8E93]">
+                            {isLogin ? 'Ainda não tem conta?' : 'Já possui uma conta?'}
+                        </span>
+                        <button
+                            onClick={() => {
+                                setIsLogin(!isLogin);
+                                setError(null);
+                                setMessage(null);
+                            }}
+                            className="ml-2 font-medium text-[#FF2D55] hover:underline focus:outline-none transition-colors"
+                        >
+                            {isLogin ? 'Criar agora' : 'Fazer login'}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
