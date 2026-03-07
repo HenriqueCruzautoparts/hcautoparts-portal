@@ -9,8 +9,8 @@ export function WelcomeModal() {
 
     useEffect(() => {
         setIsMounted(true);
-        // Verifica se o usuário já viu o modal da versão Beta v1.0
-        const hasSeenWelcome = localStorage.getItem('autoparts_beta_welcome_v1');
+        // Verifica se o usuário já viu o modal da versão Beta v2.0
+        const hasSeenWelcome = localStorage.getItem('autoparts_beta_welcome_v2');
         if (!hasSeenWelcome) {
             // Pequeno atraso para não assustar o usuário assim que a tela pisca
             const timer = setTimeout(() => setIsOpen(true), 1500);
@@ -20,7 +20,7 @@ export function WelcomeModal() {
 
     const handleClose = () => {
         setIsOpen(false);
-        localStorage.setItem('autoparts_beta_welcome_v1', 'true');
+        localStorage.setItem('autoparts_beta_welcome_v2', 'true');
     };
 
     if (!isMounted || !isOpen) return null;
