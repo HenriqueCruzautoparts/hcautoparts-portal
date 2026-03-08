@@ -66,27 +66,18 @@ export default function LoginPage() {
                     email,
                     password,
                     options: {
+                        data: {
+                            full_name: fullName,
+                            whatsapp: whatsapp,
+                            cep: cep,
+                            address: address,
+                            address_number: addressNumber,
+                            address_complement: addressComplement
+                        },
                         emailRedirectTo: `${window.location.origin}/login`,
                     },
                 });
                 if (authError) throw authError;
-
-                if (authData.user) {
-                    const { error: profileError } = await supabase
-                        .from('profiles')
-                        .insert([
-                            {
-                                id: authData.user.id,
-                                full_name: fullName,
-                                whatsapp: whatsapp,
-                                cep: cep,
-                                address: address,
-                                address_number: addressNumber,
-                                address_complement: addressComplement
-                            }
-                        ]);
-                    if (profileError) throw profileError;
-                }
 
                 setMessage('Cadastro realizado com sucesso! Faça login para continuar.');
                 setIsLogin(true); // Switch to login view

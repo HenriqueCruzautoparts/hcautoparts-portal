@@ -66,3 +66,26 @@ DO $$ BEGIN
     CREATE POLICY "Allow inserts to system_errors" ON public.system_errors
         FOR INSERT WITH CHECK (true);
 EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+-- Gatilho de Automação: Criar perfil de usuário automaticamente ao se registrar
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS trigger AS $$
+BEGIN
+  INSERT INTO public.profiles (id, full_name, whatsapp, cep, address, address_number, address_complement)
+  VALUES (
+    new.id, 
+    COALESCE(new.raw_user_meta_data->>'full_name', ''),
+    COALESCE(new.raw_user_meta_data->>'whatsapp', ''),
+    COALESCE(new.raw_user_meta_data->>'cep', ''),
+    COALESCE(new.raw_user_meta_data->>'address', ''),
+    COALESCE(new.raw_user_meta_data->>'address_number', ''),
+    COALESCE(new.raw_user_meta_data->>'address_complement', '')
+  );
+  RETURN new;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();
