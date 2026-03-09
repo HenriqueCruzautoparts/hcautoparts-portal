@@ -3,8 +3,17 @@ CREATE TABLE IF NOT EXISTS public.search_history (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
     query TEXT NOT NULL,
-    result TEXT NOT NULL
+    result TEXT NOT NULL,
+    user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL
 );
+
+-- Adicionar coluna user_id de forma segura (para bancos já existentes)
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='search_history' AND column_name='user_id') THEN
+        ALTER TABLE public.search_history ADD COLUMN user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL;
+    END IF;
+END $$;
 
 -- Configurar RLS (Row Level Security) para permitir que a chave anônima insira e leia
 ALTER TABLE public.search_history ENABLE ROW LEVEL SECURITY;

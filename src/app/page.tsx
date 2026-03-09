@@ -6,6 +6,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { SearchHistory } from '@/components/SearchHistory';
 import { WelcomeModal } from '@/components/WelcomeModal';
+import { DashboardWelcomeModal } from '@/components/DashboardWelcomeModal';
 import { supabase } from '@/lib/supabase';
 import Link from 'next/link';
 
@@ -100,12 +101,20 @@ export default function Home() {
     e.preventDefault();
     if (!query.trim() && !imageBase64) return;
 
+    if (!user) {
+      const anonSearches = parseInt(localStorage.getItem('autoparts_anon_searches') || '0', 10);
+      if (anonSearches >= 5) {
+        setError("Limite de 5 pesquisas gratuitas atingido! Crie sua conta gratuitamente para continuar economizando.");
+        return;
+      }
+    }
+
     setLoading(true);
     setError(null);
     setResult(null);
 
     try {
-      const payload: any = { query };
+      const payload: any = { query, user_id: user?.id || null };
       if (imageBase64) {
         payload.image = imageBase64;
       }
@@ -122,8 +131,11 @@ export default function Home() {
         throw new Error(data.error || 'Erro ao buscar dados.');
       }
 
-      // Process "RAW_URL:" format from prompt to standard markdown links
-      // Agora data já é o objeto estruturado { query, analise_tecnica, ml_results }
+      if (!user) {
+        const currentCount = parseInt(localStorage.getItem('autoparts_anon_searches') || '0', 10);
+        localStorage.setItem('autoparts_anon_searches', (currentCount + 1).toString());
+      }
+
       setResult(data);
     } catch (err: any) {
       setError(err.message);
@@ -196,13 +208,15 @@ export default function Home() {
             </div>
           ) : (
             <div className="flex items-center space-x-2">
-              <Link
-                href="/suporte"
-                className="flex items-center justify-center p-2 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 text-[#8E8E93] hover:text-white transition-colors"
-                title="Suporte"
+              <a
+                href="https://wa.me/5563981144408"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-center p-2 rounded-full bg-[#34C759]/10 hover:bg-[#34C759]/20 border border-[#34C759]/30 text-[#34C759] transition-colors"
+                title="Suporte WhatsApp"
               >
                 <Headset className="w-5 h-5" />
-              </Link>
+              </a>
               <Link
                 href="/login"
                 className="flex items-center space-x-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-full px-4 py-2 sm:px-5 sm:py-2 transition-colors text-white text-[14px] sm:text-[15px] font-medium"
@@ -216,6 +230,7 @@ export default function Home() {
 
         {/* Global Modals */}
         <WelcomeModal />
+        {user && <DashboardWelcomeModal />}
 
         {/* Header Section */}
         <div className="flex flex-col items-center justify-center text-center mb-10 space-y-3">

@@ -209,10 +209,27 @@ export async function POST(req: Request) {
     try {
         const payload = await req.json();
         requestContext = payload;
-        const { query, image } = payload;
+        const { query, image, user_id } = payload;
 
         if (!query && !image) {
             return NextResponse.json({ error: "A query de pesquisa ou imagem é obrigatória." }, { status: 400 });
+        }
+
+        // Limite Mensal
+        if (user_id) {
+            const startOfMonth = new Date();
+            startOfMonth.setDate(1);
+            startOfMonth.setHours(0, 0, 0, 0);
+
+            const { count, error: countError } = await supabase
+                .from('search_history')
+                .select('*', { count: 'exact', head: true })
+                .eq('user_id', user_id)
+                .gte('created_at', startOfMonth.toISOString());
+
+            if (count && count >= 15) {
+                return NextResponse.json({ error: "Você atingiu o limite mensal de 15 pesquisas gratuitas da Conta Base. Faça upgrade para continuar economizando!" }, { status: 403 });
+            }
         }
 
         // 1. Obter Inteligência do Gemini
@@ -245,7 +262,7 @@ export async function POST(req: Request) {
         // 4. Salvar Histórico async
         supabase
             .from("search_history")
-            .insert([{ query: finalResponse.query, result: JSON.stringify(finalResponse) }])
+            .insert([{ query: finalResponse.query, result: JSON.stringify(finalResponse), user_id: user_id || null }])
             .then(({ error }) => { if (error) console.error("Erro ao salvar histórico:", error); });
 
         return NextResponse.json(finalResponse);
