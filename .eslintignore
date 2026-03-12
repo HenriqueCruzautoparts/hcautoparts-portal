@@ -1,0 +1,8 @@
+# Ignore root test scripts
+/*.mjs
+/*.js
+build_log.txt
+lint_output.txt
+node_modules
+.next
+out

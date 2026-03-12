@@ -144,31 +144,21 @@ async function getGeminiAnalysis(query: string, image?: string): Promise<GeminiR
     PERSONA: Você é um Especialista Sênior em Catálogos de Peças Automotivas.
     
     MISSÃO: 
-    1. Analisar a pesquisa fornecida: ${query || "Imagem da peça."}.
-    2. REGRA ANTI-ALUCINAÇÃO GERAL: Se a pesquisa for GENÉRICA e não especificar modelo exato, ano e motorização:
-       - NÃO INVENTE códigos OEM ou da marca. Preencha-os como "Requer modelo exato" ou "Consultar Catálogo".
-       - Adicione no "breve_explicativo" um aviso CLARO: "ATENÇÃO: Sua busca foi muito genérica. Para garantir a peça e código corretos, especifique modelo, ano e motor exatos."
-       - Use termos abrangentes no Mercado Livre.
-    3. REGRA ANTI-ALUCINAÇÃO EXTREMA PARA "codigo_peca" (CÓDIGO DAS MARCAS AFTERMARKET):
-       - LLMs (incluindo você) FREQUENTEMENTE ERRAM códigos específicos de fabricantes paralelos (ex: MANN, MAHLE, Hengst, NGK).
-       - VOCÊ ESTÁ TERMINANTEMENTE PROIBIDO DE "CHUTAR", APROXIMAR OU DEDUZIR O CÓDIGO DA PEÇA.
-       - Por exemplo: O filtro de óleo do motor Audi/VW EA888 2.0 TSI (geração 1 e 2 blindado) geralmente NUNCA É o 'HU 6002 Z', e sim o 'W 719/45' da MANN ou 'OC 795' da MAHLE.
-       - SE VOCÊ NÃO TIVER 100% DE CERTEZA ABSOLUTA DE UM CATÁLOGO OFICIAL, É OBRIGATÓRIO PREENCHER O CAMPO "codigo_peca" EXATAMENTE COM O TEXTO: "Consulte o catálogo oficial do fabricante".
-       - É infinitamente preferível dizer "Consulte o catálogo" do que dar um código errado que fará o usuário comprar a peça incorreta.
-    4. Se a pesquisa FOR ESPECÍFICA (com modelo, ano e motor): Identifique EXATAMENTE UMA peça aplicável, fornecendo o "codigo_oem" correto (este você pode buscar na sua base de dados).
-    5. Recomendar as 3 Melhores Marcas PREMIUM disponíveis no Brasil para essa peça.
-    6. Para cada marca recomendada (em buscas específicas), você DEVE gerar um "termo_busca_mercadolivre" EXTREMAMENTE ESPECÍFICO (Nome da peça + Modelo + Marca da peça) focando em Lojas Confiáveis.
-    7. Forneça um "breve_explicativo" sobre a função e importância dessa peça.
-    8. CRÍTICO: RETORNE TODAS AS INFORMAÇÕES EXCLUSIVAMENTE EM PORTUGUÊS DO BRASIL (PT-BR).
+    1. Analisar a peça fornecida: ${query || "Imagem da peça."}.
+    2. Identificar EXATAMENTE UMA peça específica aplicável ao carro, ano e motor. NÃO crie listas de peças variadas nem retorne explicações genéricas. O FOCO É APENAS NA PEÇA CORRETA.
+    3. Recomendar as 3 Melhores Marcas PREMIUM disponíveis no Brasil para essa peça EXATA.
+    4. Para cada marca recomendada, você DEVE gerar um "termo_busca_mercadolivre" EXTREMAMENTE ESPECÍFICO (Ex: "lanterna traseira palio 2010 magneti marelli") focando em Lojas Confiáveis, opção de Parcelamento sem Juros e Frete Grátis.
+    5. Forneça um "breve_explicativo" sobre a função e importância dessa peça específica.
+    6. CRÍTICO: RETORNE TODAS AS INFORMAÇÕES, DESCRIÇÕES E JUSTIFICATIVAS EXCLUSIVAMENTE EM PORTUGUÊS DO BRASIL (PT-BR).
 
-    REGRAS DE FORMATO JSON - RETORNE APENAS ESTE JSON VÁLIDO (SEM CHAVES EXTRAS):
+    REGRAS DE FORMATO JSON - VOCÊ DEVE RETORNAR APENAS ESTE JSON VÁLIDO:
     {
       "identificacao_tecnica": {
         "peca": "Nome Técnico Exato da Peça Singular",
-        "breve_explicativo": "Explicação da função da peça (Aviso da regra 2 se genérica)",
-        "codigo_oem": "Código da Montadora Principal (ou 'Requer modelo exato')",
-        "nome_ingles": "Nome da peça em inglês",
-        "veiculo_base": "Modelo exato, ano e motor compatível",
+        "breve_explicativo": "Uma frase simples explicando o que é a peça identificada e sua função",
+        "codigo_oem": "Código da Montadora Principal",
+        "nome_ingles": "Nome da peça em inglês (Apenas neste campo)",
+        "veiculo_base": "Modelo exato, ano e motorização compatível (em português)",
         "validacao_catalogo": "Ex: Catálogo Oficial Volkswagen"
       },
       "intercambiabilidade": [
@@ -177,15 +167,15 @@ async function getGeminiAnalysis(query: string, image?: string): Promise<GeminiR
       "top_3_marcas": [
         {
           "marca": "NOME DA MARCA",
-          "codigo_peca": "SE NÃO TIVER CERTEZA ABSOLUTA USE O TEXTO: 'Consulte o catálogo oficial do fabricante'",
+          "codigo_peca": "Código do Fabricante",
           "justificativa": "Por que esta marca?",
-          "termo_busca_mercadolivre": "TERMO ESPECÍFICO PARA BUSCA NO ML"
+          "termo_busca_mercadolivre": "TERMO HIPER ESPECÍFICO PARA BUSCA NO MERCADO LIVRE (Ex: amortecedor dianteiro gol g5 2010 cofap)"
         }
       ],
       "referencia_aliexpress": {
         "termo_busca": "Código OEM ou Nome em inglês",
         "link_busca": "URL de busca AliExpress",
-        "recomendacao": "É seguro importar e vale a pena?"
+        "recomendacao": "É seguro importar?"
       }
     }
     `;
@@ -219,16 +209,14 @@ export async function POST(req: Request) {
     try {
         const payload = await req.json();
         requestContext = payload;
-        const { query, image, user_id, user_email } = payload;
+        const { query, image, user_id } = payload;
 
         if (!query && !image) {
             return NextResponse.json({ error: "A query de pesquisa ou imagem é obrigatória." }, { status: 400 });
         }
 
-        const isUnlimitedUser = user_email === 'henrike.henrique.cn94@gmail.com';
-
         // Limite Mensal
-        if (user_id && !isUnlimitedUser) {
+        if (user_id) {
             const startOfMonth = new Date();
             startOfMonth.setDate(1);
             startOfMonth.setHours(0, 0, 0, 0);

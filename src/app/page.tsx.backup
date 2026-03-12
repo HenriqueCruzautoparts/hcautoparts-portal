@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Search, LayoutDashboard, Activity, CheckCircle2, ImagePlus, Camera, X, LogIn, LogOut, User, Headset, Zap, Settings2, ChevronDown } from 'lucide-react';
+import { Search, LayoutDashboard, Activity, CheckCircle2, ImagePlus, Camera, X, LogIn, LogOut, User, Headset } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { SearchHistory } from '@/components/SearchHistory';
@@ -9,7 +9,6 @@ import { WelcomeModal } from '@/components/WelcomeModal';
 import { DashboardWelcomeModal } from '@/components/DashboardWelcomeModal';
 import { supabase } from '@/lib/supabase';
 import Link from 'next/link';
-import { vehicleData } from '@/data/vehicles';
 
 export default function Home() {
   const [query, setQuery] = useState('');
@@ -20,24 +19,6 @@ export default function Home() {
   const [imageBase64, setImageBase64] = useState<string | null>(null);
   const [user, setUser] = useState<any | null>(null);
   const [profile, setProfile] = useState<any | null>(null);
-
-  const [activeTab, setActiveTab] = useState<'smart' | 'guided'>('smart');
-  const [guidedForm, setGuidedForm] = useState({
-    montadora: '',
-    modelo: '',
-    ano: '',
-    motor: '',
-    peca: ''
-  });
-  const [abortController, setAbortController] = useState<AbortController | null>(null);
-
-  const handleCancelSearch = () => {
-    if (abortController) {
-      abortController.abort();
-      setAbortController(null);
-    }
-    setLoading(false);
-  };
 
   useEffect(() => {
     const fetchProfile = async (userId: string) => {
@@ -118,21 +99,7 @@ export default function Home() {
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
-
-    let finalQuery = query;
-    let finalImage = imageBase64;
-
-    if (activeTab === 'guided') {
-      const { montadora, modelo, ano, motor, peca } = guidedForm;
-      if (!montadora || !modelo || !ano || !motor || !peca) {
-        setError("Por favor, preencha todos os campos da busca guiada para garantirmos a peça correta.");
-        return;
-      }
-      finalQuery = `${peca} ${montadora} ${modelo} ${ano} ${motor}`;
-      finalImage = null; // Buscas guiadas não utilizam imagem para focar na precisão textual
-    } else {
-      if (!finalQuery.trim() && !finalImage) return;
-    }
+    if (!query.trim() && !imageBase64) return;
 
     if (!user) {
       const anonSearches = parseInt(localStorage.getItem('autoparts_anon_searches') || '0', 10);
@@ -146,20 +113,16 @@ export default function Home() {
     setError(null);
     setResult(null);
 
-    const controller = new AbortController();
-    setAbortController(controller);
-
     try {
-      const payload: any = { query: finalQuery, user_id: user?.id || null, user_email: user?.email || null };
-      if (finalImage) {
-        payload.image = finalImage;
+      const payload: any = { query, user_id: user?.id || null };
+      if (imageBase64) {
+        payload.image = imageBase64;
       }
 
       const res = await fetch('/api/pesquisa', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
-        signal: controller.signal
       });
 
       const data = await res.json();
@@ -175,9 +138,6 @@ export default function Home() {
 
       setResult(data);
     } catch (err: any) {
-      if (err.name === 'AbortError') {
-        return; // Ignore abort errors quietly
-      }
       setError(err.message);
 
       // Enviar log silenciosamente
@@ -186,16 +146,13 @@ export default function Home() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           error_message: err.message,
-          context: { origin: 'frontend_search_submit', query: activeTab === 'smart' ? query : guidedForm },
+          context: { origin: 'frontend_search_submit', query },
           user_id: user?.id
         })
       }).catch(() => { });
 
     } finally {
-      if (!abortController?.signal.aborted) {
-        setLoading(false);
-      }
-      setAbortController(null);
+      setLoading(false);
     }
   };
 
@@ -295,192 +252,72 @@ export default function Home() {
         </div>
 
         {/* Search Bar Container */}
-        <div className="max-w-3xl mx-auto w-full mb-12 relative flex flex-col items-center">
-
-          {/* Tabs */}
-          <div className="flex bg-[#1C1C1E]/60 backdrop-blur-md p-1.5 rounded-full border border-white/10 w-fit mb-8 shadow-sm">
-            <button
-              onClick={() => setActiveTab('smart')}
-              className={`flex items-center px-6 py-2.5 rounded-full text-[15px] font-medium transition-all duration-300 ${activeTab === 'smart' ? 'bg-[#2C2C2E] text-white shadow-sm border border-white/5' : 'text-[#8E8E93] hover:text-white'}`}
-            >
-              <Zap className="w-4 h-4 mr-2" />
-              Busca com IA
-            </button>
-            <button
-              onClick={() => setActiveTab('guided')}
-              className={`flex items-center px-6 py-2.5 rounded-full text-[15px] font-medium transition-all duration-300 ${activeTab === 'guided' ? 'bg-[#FF2D55]/10 text-[#FF2D55] shadow-sm border border-[#FF2D55]/20' : 'text-[#8E8E93] hover:text-[#FF2D55]'}`}
-            >
-              <Settings2 className="w-4 h-4 mr-2" />
-              Busca Guiada
-            </button>
-          </div>
-
-          {activeTab === 'smart' ? (
-            <form
-              onSubmit={handleSearch}
-              className="relative flex flex-col bg-[#1C1C1E]/70 backdrop-blur-2xl border border-white/10 rounded-[32px] p-2 shadow-[0_8px_30px_rgb(255,45,85,0.05)] focus-within:ring-2 focus-within:ring-[#FF2D55]/50 transition-all duration-300 w-full"
-            >
-              {imagePreview && (
-                <div className="relative self-start ml-4 mt-2 mb-2">
-                  <img src={imagePreview} alt="Preview" className="h-20 w-20 object-cover rounded-2xl border border-white/10 shadow-sm" />
-                  <button
-                    type="button"
-                    onClick={clearImage}
-                    className="absolute -top-2 -right-2 bg-[#2C2C2E] hover:bg-[#3A3A3C] text-gray-200 rounded-full p-1.5 shadow-sm transition-transform hover:scale-105 border border-white/10"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              )}
-
-              <div className="flex items-center w-full">
-                <div className="pl-6 pr-2">
-                  <Search className="w-5 h-5 text-[#8E8E93]" />
-                </div>
-
-                <label className="cursor-pointer p-2 rounded-full hover:bg-white/5 transition-colors group relative" title="Upload Galeria">
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={handleImageUpload}
-                    disabled={loading}
-                  />
-                  <ImagePlus className="w-5 h-5 text-[#8E8E93] group-hover:text-[#FF2D55] transition-colors" />
-                </label>
-
-                <label className="cursor-pointer p-2 rounded-full hover:bg-white/5 transition-colors group relative" title="Tirar Foto">
-                  <input
-                    type="file"
-                    accept="image/*"
-                    capture="environment"
-                    className="hidden"
-                    onChange={handleImageUpload}
-                    disabled={loading}
-                  />
-                  <Camera className="w-5 h-5 text-[#8E8E93] group-hover:text-[#FF2D55] transition-colors" />
-                </label>
-
-                <input
-                  type="text"
-                  className="flex-1 bg-transparent border-none outline-none text-white px-2 py-3 text-[17px] placeholder:text-[#8E8E93]"
-                  placeholder="Nome ou código da peça, ou chassi do veículo..."
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  disabled={loading}
-                />
+        <div className="max-w-3xl mx-auto w-full mb-12 relative">
+          <form
+            onSubmit={handleSearch}
+            className="relative flex flex-col bg-[#1C1C1E]/70 backdrop-blur-2xl border border-white/10 rounded-[32px] p-2 shadow-[0_8px_30px_rgb(255,45,85,0.05)] focus-within:ring-2 focus-within:ring-[#FF2D55]/50 transition-all duration-300"
+          >
+            {imagePreview && (
+              <div className="relative self-start ml-4 mt-2 mb-2">
+                <img src={imagePreview} alt="Preview" className="h-20 w-20 object-cover rounded-2xl border border-white/10 shadow-sm" />
                 <button
-                  type="submit"
-                  disabled={loading || (!query.trim() && !imageBase64)}
-                  className="bg-gradient-to-r from-[#FF2D55] to-[#FF3B30] hover:from-[#FF3B30] hover:to-[#FF2D55] text-white rounded-full px-6 py-3 font-semibold text-[15px] transition-all duration-300 transform active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center ml-2 shadow-[0_4px_14px_0_rgba(255,45,85,0.39)] group relative overflow-hidden"
+                  type="button"
+                  onClick={clearImage}
+                  className="absolute -top-2 -right-2 bg-[#2C2C2E] hover:bg-[#3A3A3C] text-gray-200 rounded-full p-1.5 shadow-sm transition-transform hover:scale-105 border border-white/10"
                 >
-                  <span>{loading ? 'Buscando...' : 'Buscar'}</span>
-                  {!loading && (
-                    <div className="absolute inset-0 h-full w-full opacity-0 group-hover:opacity-20 bg-gradient-to-r from-transparent via-white to-transparent -translate-x-full group-hover:animate-shimmer" />
-                  )}
+                  <X className="w-3.5 h-3.5" />
                 </button>
               </div>
-            </form>
-          ) : (
-            <form onSubmit={handleSearch} className="w-full bg-[#1C1C1E]/70 backdrop-blur-2xl border border-white/10 rounded-[32px] p-6 shadow-[0_8px_30px_rgb(255,45,85,0.05)] transition-all duration-300">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-                <div className="space-y-1.5 relative">
-                  <label className="text-[13px] font-medium text-[#8E8E93] ml-1">Montadora</label>
-                  <div className="relative">
-                    <select
-                      value={guidedForm.montadora}
-                      onChange={(e) => setGuidedForm({ ...guidedForm, montadora: e.target.value, modelo: '', ano: '', motor: '' })}
-                      disabled={loading}
-                      className="w-full bg-[#2C2C2E]/60 border border-white/10 rounded-2xl px-4 py-3 text-white focus:outline-none focus:border-[#FF2D55]/50 focus:bg-[#3A3A3C]/40 transition-colors appearance-none pr-10 cursor-pointer"
-                    >
-                      <option value="" className="bg-[#1C1C1E] text-[#8E8E93]">Selecione a Montadora...</option>
-                      {Object.keys(vehicleData).sort().map(brand => (
-                        <option key={brand} value={brand} className="bg-[#1C1C1E] text-white">{brand}</option>
-                      ))}
-                    </select>
-                    <ChevronDown className="absolute right-4 top-1/2 transform -translate-y-1/2 w-4 h-4 text-[#8E8E93] pointer-events-none" />
-                  </div>
-                </div>
+            )}
 
-                <div className="space-y-1.5 relative">
-                  <label className="text-[13px] font-medium text-[#8E8E93] ml-1">Modelo</label>
-                  <div className="relative">
-                    <select
-                      value={guidedForm.modelo}
-                      onChange={(e) => setGuidedForm({ ...guidedForm, modelo: e.target.value, ano: '', motor: '' })}
-                      disabled={loading || !guidedForm.montadora}
-                      className="w-full bg-[#2C2C2E]/60 border border-white/10 rounded-2xl px-4 py-3 text-white focus:outline-none focus:border-[#FF2D55]/50 focus:bg-[#3A3A3C]/40 transition-colors appearance-none pr-10 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      <option value="" className="bg-[#1C1C1E] text-[#8E8E93]">Selecione o Modelo...</option>
-                      {guidedForm.montadora && Object.keys(vehicleData[guidedForm.montadora] || {}).sort().map(model => (
-                        <option key={model} value={model} className="bg-[#1C1C1E] text-white">{model}</option>
-                      ))}
-                    </select>
-                    <ChevronDown className="absolute right-4 top-1/2 transform -translate-y-1/2 w-4 h-4 text-[#8E8E93] pointer-events-none" />
-                  </div>
-                </div>
-
-                <div className="space-y-1.5 relative">
-                  <label className="text-[13px] font-medium text-[#8E8E93] ml-1">Ano</label>
-                  <div className="relative">
-                    <select
-                      value={guidedForm.ano}
-                      onChange={(e) => setGuidedForm({ ...guidedForm, ano: e.target.value, motor: '' })}
-                      disabled={loading || !guidedForm.modelo}
-                      className="w-full bg-[#2C2C2E]/60 border border-white/10 rounded-2xl px-4 py-3 text-white focus:outline-none focus:border-[#FF2D55]/50 focus:bg-[#3A3A3C]/40 transition-colors appearance-none pr-10 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      <option value="" className="bg-[#1C1C1E] text-[#8E8E93]">Selecione o Ano...</option>
-                      {guidedForm.montadora && guidedForm.modelo && Object.keys(vehicleData[guidedForm.montadora]?.[guidedForm.modelo] || {}).sort((a,b) => b.localeCompare(a)).map(year => (
-                        <option key={year} value={year} className="bg-[#1C1C1E] text-white">{year}</option>
-                      ))}
-                    </select>
-                    <ChevronDown className="absolute right-4 top-1/2 transform -translate-y-1/2 w-4 h-4 text-[#8E8E93] pointer-events-none" />
-                  </div>
-                </div>
-
-                <div className="space-y-1.5 relative">
-                  <label className="text-[13px] font-medium text-[#8E8E93] ml-1">Motorização</label>
-                  <div className="relative">
-                    <select
-                      value={guidedForm.motor}
-                      onChange={(e) => setGuidedForm({ ...guidedForm, motor: e.target.value })}
-                      disabled={loading || !guidedForm.ano}
-                      className="w-full bg-[#2C2C2E]/60 border border-white/10 rounded-2xl px-4 py-3 text-white focus:outline-none focus:border-[#FF2D55]/50 focus:bg-[#3A3A3C]/40 transition-colors appearance-none pr-10 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      <option value="" className="bg-[#1C1C1E] text-[#8E8E93]">Selecione a Motorização...</option>
-                      {guidedForm.montadora && guidedForm.modelo && guidedForm.ano && (vehicleData[guidedForm.montadora]?.[guidedForm.modelo]?.[guidedForm.ano] || []).map(engine => (
-                        <option key={engine} value={engine} className="bg-[#1C1C1E] text-white">{engine}</option>
-                      ))}
-                    </select>
-                    <ChevronDown className="absolute right-4 top-1/2 transform -translate-y-1/2 w-4 h-4 text-[#8E8E93] pointer-events-none" />
-                  </div>
-                </div>
+            <div className="flex items-center w-full">
+              <div className="pl-6 pr-2">
+                <Search className="w-5 h-5 text-[#8E8E93]" />
               </div>
 
-              <div className="space-y-1.5 mb-8 mt-2">
-                <label className="text-[13px] font-medium text-[#8E8E93] ml-1">Qual peça você precisa?</label>
+              <label className="cursor-pointer p-2 rounded-full hover:bg-white/5 transition-colors group relative" title="Upload Galeria">
                 <input
-                  type="text"
-                  placeholder="Ex: Filtro de Óleo, Pastilha de Freio..."
-                  value={guidedForm.peca}
-                  onChange={(e) => setGuidedForm({ ...guidedForm, peca: e.target.value })}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleImageUpload}
                   disabled={loading}
-                  className="w-full bg-[#2C2C2E]/60 border border-white/10 rounded-2xl px-4 py-3.5 text-white placeholder:text-[#8E8E93]/50 focus:outline-none focus:border-[#FF2D55]/50 focus:bg-[#3A3A3C]/40 transition-colors text-[15px]"
                 />
-              </div>
+                <ImagePlus className="w-5 h-5 text-[#8E8E93] group-hover:text-[#FF2D55] transition-colors" />
+              </label>
 
+              <label className="cursor-pointer p-2 rounded-full hover:bg-white/5 transition-colors group relative" title="Tirar Foto">
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  className="hidden"
+                  onChange={handleImageUpload}
+                  disabled={loading}
+                />
+                <Camera className="w-5 h-5 text-[#8E8E93] group-hover:text-[#FF2D55] transition-colors" />
+              </label>
+
+              <input
+                type="text"
+                className="flex-1 bg-transparent border-none outline-none text-white px-2 py-3 text-[17px] placeholder:text-[#8E8E93]"
+                placeholder="Nome ou código da peça, ou chassi do veículo..."
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                disabled={loading}
+              />
               <button
                 type="submit"
-                disabled={loading}
-                className="w-full bg-gradient-to-r from-[#FF2D55] to-[#FF3B30] hover:from-[#FF3B30] hover:to-[#FF2D55] text-white rounded-2xl px-6 py-4 font-bold text-[16px] transition-all duration-300 transform active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center shadow-[0_4px_14px_0_rgba(255,45,85,0.39)] group relative overflow-hidden"
+                disabled={loading || (!query.trim() && !imageBase64)}
+                className="bg-gradient-to-r from-[#FF2D55] to-[#FF3B30] hover:from-[#FF3B30] hover:to-[#FF2D55] text-white rounded-full px-6 py-3 font-semibold text-[15px] transition-all duration-300 transform active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center ml-2 shadow-[0_4px_14px_0_rgba(255,45,85,0.39)]"
               >
-                <span>{loading ? 'Analisando Catálogos Oficiais...' : 'Buscar Peça Exata'}</span>
+                <span>{loading ? 'Buscando...' : 'Buscar'}</span>
                 {!loading && (
                   <div className="absolute inset-0 h-full w-full opacity-0 group-hover:opacity-20 bg-gradient-to-r from-transparent via-white to-transparent -translate-x-full group-hover:animate-shimmer" />
                 )}
               </button>
-            </form>
-          )}
+            </div>
+          </form>
         </div>
 
         {/* Search History */}
@@ -502,18 +339,6 @@ export default function Home() {
         {/* Loading State - iOS Style Skeletons */}
         {loading && (
           <div className="animate-in fade-in duration-500 max-w-4xl mx-auto space-y-8 w-full mt-8">
-            {/* iOS Style Spinner & Cancel Button */}
-            <div className="flex flex-col items-center justify-center mb-10">
-              <div className="w-10 h-10 border-4 border-[#FF2D55]/20 border-t-[#FF2D55] rounded-full animate-spin"></div>
-              <button
-                onClick={handleCancelSearch}
-                type="button"
-                className="mt-4 px-4 py-2 rounded-full border border-white/10 text-[#8E8E93] hover:text-white hover:bg-[#FF3B30]/20 hover:border-[#FF3B30]/30 text-[13px] font-medium transition-all duration-300"
-              >
-                Cancelar Busca
-              </button>
-            </div>
-
             {/* Skeleton ML Offers */}
             <div className="rounded-[32px] bg-[#1C1C1E]/60 backdrop-blur-xl border border-white/10 p-6 md:p-8 shadow-[0_8px_30px_rgb(0,0,0,0.5)]">
               <div className="flex items-center mb-6">

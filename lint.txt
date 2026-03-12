@@ -1,0 +1,87 @@
+﻿
+C:\Users\Henrique Cruz\.gemini\antigravity\scratch\autoparts-portal\src\app\api\pesquisa\route.ts
+   65:70  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  218:25  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  282:21  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Users\Henrique Cruz\.gemini\antigravity\scratch\autoparts-portal\src\app\login\page.tsx
+   26:23  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   46:23  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  123:23  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Users\Henrique Cruz\.gemini\antigravity\scratch\autoparts-portal\src\app\page.tsx
+   17:40  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   21:36  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   22:42  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  153:22  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  177:19  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  576:49  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  686:77  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Users\Henrique Cruz\.gemini\antigravity\scratch\autoparts-portal\src\app\perfil\page.tsx
+   11:38  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+   12:44  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  113:23  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Users\Henrique Cruz\.gemini\antigravity\scratch\autoparts-portal\src\app\resetar-senha\page.tsx
+  53:23  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Users\Henrique Cruz\.gemini\antigravity\scratch\autoparts-portal\src\components\DashboardWelcomeModal.tsx
+  9:9  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+C:\Users\Henrique Cruz\.gemini\antigravity\scratch\autoparts-portal\src\components\DashboardWelcomeModal.tsx:9:9
+   7 |
+   8 |     useEffect(() => {
+>  9 |         setIsMounted(true);
+     |         ^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  10 |         // Verifica se o usu├írio rec├®m-logado j├í viu este modal de onboarding
+  11 |         const hasSeenOnboarding = localStorage.getItem('autoparts_user_onboarding_v1');
+  12 |         if (!hasSeenOnboarding) {  react-hooks/set-state-in-effect
+
+C:\Users\Henrique Cruz\.gemini\antigravity\scratch\autoparts-portal\src\components\InstallPrompt.tsx
+   9:58   error  Unexpected any. Specify a different type                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 @typescript-eslint/no-explicit-any
+  14:114  error  Unexpected any. Specify a different type                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 @typescript-eslint/no-explicit-any
+  15:9    error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+C:\Users\Henrique Cruz\.gemini\antigravity\scratch\autoparts-portal\src\components\InstallPrompt.tsx:15:9
+  13 |         // Verifica se j├í est├í instalado (PWA no modo standalone)
+  14 |         const isStandaloneMode = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone;
+> 15 |         setIsStandalone(isStandaloneMode);
+     |         ^^^^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  16 |
+  17 |         // Verifica se ├® um dispositivo iOS para mostrar a instru├º├úo manual
+  18 |         const userAgent = window.navigator.userAgent.toLowerCase();  react-hooks/set-state-in-effect
+  31:55   error  Unexpected any. Specify a different type                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 @typescript-eslint/no-explicit-any
+
+C:\Users\Henrique Cruz\.gemini\antigravity\scratch\autoparts-portal\src\components\WelcomeModal.tsx
+  11:9  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+C:\Users\Henrique Cruz\.gemini\antigravity\scratch\autoparts-portal\src\components\WelcomeModal.tsx:11:9
+   9 |
+  10 |     useEffect(() => {
+> 11 |         setIsMounted(true);
+     |         ^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  12 |         // Verifica se o usu├írio j├í viu o modal da vers├úo Beta v2.0
+  13 |         const hasSeenWelcome = localStorage.getItem('autoparts_beta_welcome_v2');
+  14 |         if (!hasSeenWelcome) {  react-hooks/set-state-in-effect
+
+Ô£û 23 problems (23 errors, 0 warnings)
+
