@@ -29,42 +29,165 @@ interface GeminiResponse {
     };
 }
 
-async function scrapeML(query: string, marca: string, idSuffix: string, expectedPartName: string) {
-    const formattedQuery = query.toLowerCase().replace(/ /g, '-').replace(/[^a-z0-9-]/g, '');
-    const url = `https://lista.mercadolivre.com.br/${formattedQuery}_DisplayType_G_NoIndex_True`;
+// Pool de User-Agents reais para rotacionar e evitar bloqueio
+const USER_AGENTS = [
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 Edg/122.0.0.0',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:124.0) Gecko/20100101 Firefox/124.0',
+    'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+];
 
-    const normalizeText = (text: string) => text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-    const baseWord = normalizeText(expectedPartName).split(' ')[0];
+// Extrai o ano da query para validar resultados (ex: "2017", "2011", etc.)
+function extractYearFromQuery(query: string): number | null {
+    const match = query.match(/\b(19[5-9]\d|20[0-2]\d)\b/);
+    return match ? parseInt(match[1]) : null;
+}
+
+// Extrai motorização da query para validar resultados (ex: "2.0 TFSI", "1.0 turbo")
+function extractEngineFromQuery(query: string): string | null {
+    const match = query.match(/\b(\d\.\d[\w\s]{0,12})/i);
+    return match ? match[1].trim().toLowerCase() : null;
+}
+
+// Verifica se o título do produto bate com o ano e motorização da query
+function isTitleRelevant(title: string, queryYear: number | null, queryEngine: string | null): boolean {
+    const normalizedTitle = title.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+    // Verificação de ano: o título deve conter o ano da query OU um ano dentro de ±3 anos
+    if (queryYear) {
+        const titleYears = [...normalizedTitle.matchAll(/\b(19[5-9]\d|20[0-2]\d)\b/g)].map(m => parseInt(m[1]));
+        if (titleYears.length > 0) {
+            const hasCompatibleYear = titleYears.some(y => Math.abs(y - queryYear) <= 3);
+            if (!hasCompatibleYear) return false;
+        }
+        // Se o título não menciona nenhum ano, não descartamos (produto universal)
+    }
+
+    // Verificação de motorização: se a query tem motorização, o título deve conter algo compatível
+    if (queryEngine && queryEngine.length > 2) {
+        const engineDigits = queryEngine.replace(/[^0-9]/g, '').substring(0, 2); // ex: "20" de "2.0"
+        const normalizedEngine = queryEngine.replace(/[^a-z0-9]/g, '');
+        // Verificação flexível: qualquer menção à cilindrada ou código do motor
+        const hasEngine = normalizedTitle.includes(normalizedEngine) ||
+            (engineDigits.length >= 2 && normalizedTitle.includes(engineDigits[0] + '.' + engineDigits[1]));
+        if (!hasEngine && queryEngine.length > 4) return false; // Só filtra se a motorização for específica
+    }
+
+    return true;
+}
+
+async function scrapeML(query: string, marca: string, idSuffix: string, expectedPartName: string) {
+    // ✅ Fix 5: URL de busca com termos limpos - o ML aceita melhor queries bem formatadas
+    const cleanQuery = query.trim().replace(/\s+/g, ' ');
+    const formattedQuery = cleanQuery.toLowerCase().replace(/ /g, '-').replace(/[^a-z0-9-]/g, '');
+    
+    // Extrai ano e motorização para validação posterior dos resultados
+    const queryYear = extractYearFromQuery(query);
+    const queryEngine = extractEngineFromQuery(query);
+    
+    // Monta URL com filtro de ano se disponível (melhora precisão nos resultados)
+    let url = `https://lista.mercadolivre.com.br/${formattedQuery}_DisplayType_G_NoIndex_True`;
+    if (queryYear) {
+        url += `#D[A${queryYear - 1}-${queryYear + 1}]`;
+    }
+
+    // ✅ Validação multi-palavra: extrai as palavras mais significativas da peça
+    // Ignora stopwords vazias ('de', 'do', 'kit', 'par', 'jogo') e usa as substantivas
+    const STOPWORDS = new Set(['de', 'do', 'da', 'dos', 'das', 'e', 'o', 'a', 'os', 'as', 'em', 'com', 'para', 'por']);
+    const normalizeText = (text: string) => text.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+    // Palavras-chave importantes da peça (as 3 primeiras com 4+ chars, excluindo stopwords)
+    const partWords = normalizeText(expectedPartName)
+        .split(/\s+/)
+        .filter(w => w.length >= 4 && !STOPWORDS.has(w))
+        .slice(0, 3);
+
+    // Palavras de exclusão: se o título contiver alguma dessas mas NÃO contiver a peça correta
+    // Ex: busca por 'Junta Tampa Valvula' não deve aceitar 'Filtro Oleo'
+    const CONFLICTING_PAIRS: Array<[string, string]> = [
+        ['junta', 'filtro'],   // Junta ≠ Filtro
+        ['filtro', 'junta'],   // Filtro ≠ Junta
+        ['amortecedor', 'pastilha'],
+        ['pastilha', 'amortecedor'],
+        ['correia', 'filtro'],
+        ['vela', 'filtro'],
+        ['bomba', 'pastilha'],
+    ];
 
     const isValidProduct = (title: string) => {
-        if (!baseWord || baseWord.length < 3) return true; // Se não tiver base válida, passa.
+        if (partWords.length === 0) return true;
         const normalizedTitle = normalizeText(title);
-        return new RegExp(`\\b${baseWord.replace(/[^a-z0-9]/g, '')}`).test(normalizedTitle);
+
+        // Verifica pares conflitantes: rejeita se o título tem palavra errada para essa peça
+        for (const [partKey, badWord] of CONFLICTING_PAIRS) {
+            const partHasKey = partWords.some(w => w.includes(partKey));
+            const titleHasBad = normalizedTitle.includes(badWord);
+            const titleHasGood = normalizedTitle.includes(partKey);
+            if (partHasKey && titleHasBad && !titleHasGood) return false;
+        }
+
+        // Pelo menos 1 das palavras-chave significativas deve estar no título
+        return partWords.some(kw => normalizedTitle.includes(kw));
     };
 
+    // ✅ Fix 3: Delay aleatório entre 300–800ms para simular comportamento humano
+    await new Promise(resolve => setTimeout(resolve, 300 + Math.random() * 500));
+
+    // ✅ Fix 1: Seleciona User-Agent aleatório do pool
+    const userAgent = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
+
     try {
+        // ✅ Fix 2: Headers completos simulando navegador real (Chrome no Windows)
         const res = await fetch(url, {
             headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept': 'text/html'
+                'User-Agent': userAgent,
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+                'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
+                'Accept-Encoding': 'gzip, deflate, br',
+                'Referer': `https://www.google.com/search?q=${encodeURIComponent(cleanQuery + ' mercado livre')}`,
+                'sec-ch-ua': '"Google Chrome";v="123", "Not:A-Brand";v="8", "Chromium";v="123"',
+                'sec-ch-ua-mobile': '?0',
+                'sec-ch-ua-platform': '"Windows"',
+                'sec-fetch-dest': 'document',
+                'sec-fetch-mode': 'navigate',
+                'sec-fetch-site': 'cross-site',
+                'sec-fetch-user': '?1',
+                'upgrade-insecure-requests': '1',
+                'Cache-Control': 'max-age=0',
+                'Connection': 'keep-alive',
             }
         });
+
+        if (!res.ok) {
+            console.warn(`ML retornou status ${res.status} para query: "${query}"`);
+        }
+
         const html = await res.text();
 
-        // Estratégia 1: Tenta o Fallback do LD+JSON Graph (Funciona para páginas ofuscadas de resultados)
+        // Estratégia 1: LD+JSON Graph (funciona para páginas com schema.org)
         const scriptRegex = /<script\b[^>]*>([\s\S]*?)<\/script>/g;
         let scriptMatch;
-        let jsonPayload = null;
+        let bestJsonProduct = null;
 
         while ((scriptMatch = scriptRegex.exec(html)) !== null) {
-            // Mercado Livre injeta os produtos em um schema.org Graph Array
             if (scriptMatch[1].includes('"@graph"') && scriptMatch[1].includes('"Product"')) {
                 try {
                     const parsed = JSON.parse(scriptMatch[1]);
                     if (parsed['@graph']) {
-                        const products = parsed['@graph'].filter((x: any) => x['@type'] === 'Product' && x.offers && x.offers.price && isValidProduct(x.name || ''));
-                        if (products.length > 0) {
-                            jsonPayload = products[0];
+                        // ✅ Fix 4: Analisa todos os candidatos e escolhe o mais relevante
+                        const products = parsed['@graph'].filter((x: any) =>
+                            x['@type'] === 'Product' &&
+                            x.offers &&
+                            x.offers.price &&
+                            isValidProduct(x.name || '')
+                        );
+                        // Prioriza produto que também valide ano/motorização
+                        const bestProduct = products.find((p: any) =>
+                            isTitleRelevant(p.name || '', queryYear, queryEngine)
+                        ) || products[0];
+                        if (bestProduct) {
+                            bestJsonProduct = bestProduct;
                             break;
                         }
                     }
@@ -72,23 +195,31 @@ async function scrapeML(query: string, marca: string, idSuffix: string, expected
             }
         }
 
-        if (jsonPayload && jsonPayload.offers && jsonPayload.offers.url) {
+        if (bestJsonProduct && bestJsonProduct.offers && bestJsonProduct.offers.url) {
             return {
-                id: (jsonPayload.sku || 'ml-json') + '-' + idSuffix,
-                title: jsonPayload.name,
-                price: parseFloat(jsonPayload.offers.price),
-                link: jsonPayload.offers.url.split('?')[0].split('#')[0],
-                thumbnail: jsonPayload.image || 'https://http2.mlstatic.com/frontend-assets/ml-web-navigation/ui-navigation/6.6.73/mercadolibre/logo_large_25years@2x.png',
+                id: (bestJsonProduct.sku || 'ml-json') + '-' + idSuffix,
+                title: bestJsonProduct.name,
+                price: parseFloat(bestJsonProduct.offers.price),
+                link: bestJsonProduct.offers.url.split('?')[0].split('#')[0],
+                thumbnail: bestJsonProduct.image || 'https://http2.mlstatic.com/frontend-assets/ml-web-navigation/ui-navigation/6.6.73/mercadolibre/logo_large_25years@2x.png',
                 brand: marca,
                 coupon: null,
                 parcelamento: "Ver na loja"
             };
         }
 
-        // Estratégia 2: Regex Universal Baseado em Links de ID (Funciona para listas padrão)
+        // Estratégia 2: Regex por Links de ID do ML
         const rx = /href="(https:\/\/[^"]*mercadolivre\.com\.br\/MLB-[^"]+)"/g;
         let m;
-        while ((m = rx.exec(html)) !== null) {
+
+        // ✅ Fix 4: Coleta os top 5 candidatos e escolhe o melhor (não apenas o primeiro)
+        const candidates: Array<{
+            id: string; title: string; price: number; link: string;
+            thumbnail: string; brand: string; coupon: string | null; parcelamento: string;
+            relevanceScore: number;
+        }> = [];
+
+        while ((m = rx.exec(html)) !== null && candidates.length < 5) {
             const rawLink = m[1];
             const cleanLink = rawLink.split('#')[0].split('?')[0];
             const idx = m.index;
@@ -104,30 +235,49 @@ async function scrapeML(query: string, marca: string, idSuffix: string, expected
                 const title = titleMatch[1].replace(/<[^>]+>/g, '').trim();
 
                 if (isValidProduct(title)) {
-                    return {
+                    // ✅ Fix 4: Calcula score de relevância do candidato
+                    let relevanceScore = 0;
+                    if (isTitleRelevant(title, queryYear, queryEngine)) relevanceScore += 10;
+                    if (queryYear && title.includes(String(queryYear))) relevanceScore += 5;
+                    if (marca && title.toLowerCase().includes(marca.toLowerCase())) relevanceScore += 3;
+
+                    candidates.push({
                         id: cleanLink.split('/')[3] + '-' + idSuffix,
-                        title: title,
+                        title,
                         price: parseFloat(priceMatch[1].replace(/\./g, '').replace(',', '.')),
                         link: cleanLink,
                         thumbnail: imgMatch ? imgMatch[1] : 'https://http2.mlstatic.com/frontend-assets/ml-web-navigation/ui-navigation/6.6.73/mercadolibre/logo_large_25years@2x.png',
                         brand: marca,
                         coupon: couponMatch ? couponMatch[1].trim() : null,
-                        parcelamento: parcelMatch ? parcelMatch[1].replace(/<[^>]+>/g, '').trim() : "À vista"
-                    };
+                        parcelamento: parcelMatch ? parcelMatch[1].replace(/<[^>]+>/g, '').trim() : "À vista",
+                        relevanceScore
+                    });
                 }
             }
+        }
+
+        if (candidates.length > 0) {
+            // Ordena pelo maior score de relevância e retorna o melhor
+            candidates.sort((a, b) => b.relevanceScore - a.relevanceScore);
+            const best = candidates[0];
+            return {
+                id: best.id, title: best.title, price: best.price, link: best.link,
+                thumbnail: best.thumbnail, brand: best.brand, coupon: best.coupon,
+                parcelamento: best.parcelamento
+            };
         }
 
     } catch (error) {
         console.error(`Erro ao fazer scrape no ML para "${query}":`, error);
     }
 
-    // Estratégia 3: Fallback ABSOLUTO - Se o ML bloquear o IP ou não achar nada, retorna a URL de busca direta para o usuário não ficar sem link
+    // Estratégia 3: Fallback ABSOLUTO - link de busca direta no ML para o usuário
+    const fallbackUrl = `https://lista.mercadolivre.com.br/${formattedQuery}_DisplayType_G_NoIndex_True`;
     return {
         id: 'ml-fallback-' + idSuffix,
         title: `Ver as melhores ofertas para ${marca}`,
         price: null,
-        link: url, // Link direto para a página de pesquisa do ML
+        link: fallbackUrl,
         thumbnail: 'https://http2.mlstatic.com/frontend-assets/ml-web-navigation/ui-navigation/6.6.73/mercadolibre/logo_large_25years@2x.png',
         brand: marca,
         coupon: null,
@@ -219,7 +369,7 @@ export async function POST(req: Request) {
     try {
         const payload = await req.json();
         requestContext = payload;
-        const { query, image, user_id, user_email } = payload;
+        const { query, image, user_id, user_email, anon_fingerprint } = payload;
 
         if (!query && !image) {
             return NextResponse.json({ error: "A query de pesquisa ou imagem é obrigatória." }, { status: 400 });
@@ -227,13 +377,13 @@ export async function POST(req: Request) {
 
         const isUnlimitedUser = user_email === 'henrike.henrique.cn94@gmail.com';
 
-        // Limite Mensal
+        // Limite Mensal para usuários logados
         if (user_id && !isUnlimitedUser) {
             const startOfMonth = new Date();
             startOfMonth.setDate(1);
             startOfMonth.setHours(0, 0, 0, 0);
 
-            const { count, error: countError } = await supabase
+            const { count } = await supabase
                 .from('search_history')
                 .select('*', { count: 'exact', head: true })
                 .eq('user_id', user_id)
@@ -241,6 +391,23 @@ export async function POST(req: Request) {
 
             if (count && count >= 15) {
                 return NextResponse.json({ error: "Você atingiu o limite mensal de 15 pesquisas gratuitas da Conta Base. Faça upgrade para continuar economizando!" }, { status: 403 });
+            }
+        }
+
+        // ✅ Limite persistente para usuários ANÔNIMOS por fingerprint (lado servidor)
+        // Isso impede o bypass por limpeza de localStorage ou troca de aba/dia
+        if (!user_id && anon_fingerprint) {
+            const { data: anonRecord } = await supabase
+                .from('anon_search_limits')
+                .select('id, search_count')
+                .eq('fingerprint', anon_fingerprint)
+                .single();
+
+            if (anonRecord && anonRecord.search_count >= 5) {
+                return NextResponse.json({
+                    error: "Você já utilizou suas 5 pesquisas gratuitas. Crie sua conta gratuitamente para continuar pesquisando sem limites!",
+                    require_signup: true
+                }, { status: 403 });
             }
         }
 
@@ -277,6 +444,28 @@ export async function POST(req: Request) {
             .insert([{ query: finalResponse.query, result: JSON.stringify(finalResponse), user_id: user_id || null }])
             .then(({ error }) => { if (error) console.error("Erro ao salvar histórico:", error); });
 
+        // ✅ Incrementa ou cria o contador de pesquisas anônimas no servidor
+        if (!user_id && anon_fingerprint) {
+            const { data: existing } = await supabase
+                .from('anon_search_limits')
+                .select('id, search_count')
+                .eq('fingerprint', anon_fingerprint)
+                .single();
+
+            if (existing) {
+                supabase
+                    .from('anon_search_limits')
+                    .update({ search_count: existing.search_count + 1, last_search_at: new Date().toISOString() })
+                    .eq('fingerprint', anon_fingerprint)
+                    .then();
+            } else {
+                supabase
+                    .from('anon_search_limits')
+                    .insert([{ fingerprint: anon_fingerprint, search_count: 1 }])
+                    .then();
+            }
+        }
+
         return NextResponse.json(finalResponse);
 
     } catch (error: any) {
@@ -291,3 +480,4 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: "Erro interno.", details: error.message }, { status: 500 });
     }
 }
+

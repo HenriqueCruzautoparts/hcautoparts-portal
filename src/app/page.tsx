@@ -20,6 +20,7 @@ export default function Home() {
   const [imageBase64, setImageBase64] = useState<string | null>(null);
   const [user, setUser] = useState<any | null>(null);
   const [profile, setProfile] = useState<any | null>(null);
+  const [anonFingerprint, setAnonFingerprint] = useState<string | null>(null);
 
   const [activeTab, setActiveTab] = useState<'smart' | 'guided'>('smart');
   const [guidedForm, setGuidedForm] = useState({
@@ -39,11 +40,50 @@ export default function Home() {
     setLoading(false);
   };
 
+  // Gera um fingerprint estável do dispositivo/navegador para rastrear limite anônimo no servidor
+  // Usa dados disponíveis sem libs externas: userAgent + timezone + idioma + resolução + canvas hash
+  const generateFingerprint = async (): Promise<string> => {
+    const components = [
+      navigator.userAgent,
+      navigator.language,
+      Intl.DateTimeFormat().resolvedOptions().timeZone,
+      `${screen.width}x${screen.height}x${screen.colorDepth}`,
+      navigator.hardwareConcurrency?.toString() || '0',
+      new Date().getTimezoneOffset().toString(),
+    ];
+    // Canvas fingerprint (hash visual do GPU/driver de renderização)
+    try {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.textBaseline = 'top';
+        ctx.font = '14px Arial';
+        ctx.fillText('AutoParts🔧', 2, 2);
+        components.push(canvas.toDataURL().slice(-50));
+      }
+    } catch (e) {}
+    const raw = components.join('|');
+    // Hash simples via Web Crypto API
+    const buffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(raw));
+    return Array.from(new Uint8Array(buffer)).map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 32);
+  };
+
   useEffect(() => {
     const fetchProfile = async (userId: string) => {
       const { data } = await supabase.from('profiles').select('full_name').eq('id', userId).single();
       setProfile(data);
     };
+
+    // Gera e armazena o fingerprint do dispositivo (persiste no sessionStorage para evitar recalcular)
+    const initFingerprint = async () => {
+      let fp = sessionStorage.getItem('ap_fp');
+      if (!fp) {
+        fp = await generateFingerprint();
+        sessionStorage.setItem('ap_fp', fp);
+      }
+      setAnonFingerprint(fp);
+    };
+    initFingerprint();
 
     // Check initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -134,10 +174,11 @@ export default function Home() {
       if (!finalQuery.trim() && !finalImage) return;
     }
 
+    // Verificação local rápida no localStorage (cache client-side, não é a fonte de verdade)
     if (!user) {
       const anonSearches = parseInt(localStorage.getItem('autoparts_anon_searches') || '0', 10);
       if (anonSearches >= 5) {
-        setError("Limite de 5 pesquisas gratuitas atingido! Crie sua conta gratuitamente para continuar economizando.");
+        setError("Você já utilizou suas 5 pesquisas gratuitas. Crie sua conta gratuitamente para continuar pesquisando sem limites!");
         return;
       }
     }
@@ -150,7 +191,13 @@ export default function Home() {
     setAbortController(controller);
 
     try {
-      const payload: any = { query: finalQuery, user_id: user?.id || null, user_email: user?.email || null };
+      // Envia também o fingerprint do dispositivo para o servidor validar o limite de forma persistente
+      const payload: any = {
+        query: finalQuery,
+        user_id: user?.id || null,
+        user_email: user?.email || null,
+        anon_fingerprint: !user ? (anonFingerprint || null) : null,
+      };
       if (finalImage) {
         payload.image = finalImage;
       }
@@ -165,9 +212,14 @@ export default function Home() {
       const data = await res.json();
 
       if (!res.ok) {
+        // Se o servidor sinalizou que precisa de cadastro, atualiza o contador local também
+        if (data.require_signup) {
+          localStorage.setItem('autoparts_anon_searches', '5');
+        }
         throw new Error(data.error || 'Erro ao buscar dados.');
       }
 
+      // Sincroniza o contador local com o servidor após pesquisa bem-sucedida
       if (!user) {
         const currentCount = parseInt(localStorage.getItem('autoparts_anon_searches') || '0', 10);
         localStorage.setItem('autoparts_anon_searches', (currentCount + 1).toString());
