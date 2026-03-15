@@ -7,6 +7,7 @@ import remarkGfm from 'remark-gfm';
 import { SearchHistory } from '@/components/SearchHistory';
 import { WelcomeModal } from '@/components/WelcomeModal';
 import { DashboardWelcomeModal } from '@/components/DashboardWelcomeModal';
+import { CompleteProfileModal } from '@/components/CompleteProfileModal';
 import { supabase } from '@/lib/supabase';
 import Link from 'next/link';
 import { vehicleData } from '@/data/vehicles';
@@ -23,6 +24,7 @@ export default function Home() {
   const [anonFingerprint, setAnonFingerprint] = useState<string | null>(null);
 
   const [activeTab, setActiveTab] = useState<'smart' | 'guided'>('smart');
+  const [showCompleteProfile, setShowCompleteProfile] = useState(false);
   const [guidedForm, setGuidedForm] = useState({
     montadora: '',
     modelo: '',
@@ -88,15 +90,27 @@ export default function Home() {
     // Check initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
-      if (session?.user) fetchProfile(session.user.id);
-      else setProfile(null);
+      if (session?.user) {
+        fetchProfile(session.user.id);
+        if (!session.user.user_metadata?.whatsapp) {
+          setShowCompleteProfile(true);
+        }
+      } else {
+        setProfile(null);
+      }
     });
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
-      if (session?.user) fetchProfile(session.user.id);
-      else setProfile(null);
+      if (session?.user) {
+        fetchProfile(session.user.id);
+        if (!session.user.user_metadata?.whatsapp) {
+          setShowCompleteProfile(true);
+        }
+      } else {
+        setProfile(null);
+      }
     });
 
     return () => subscription.unsubscribe();
@@ -854,6 +868,17 @@ export default function Home() {
             </div>
           </div>
         )}
+
+        <WelcomeModal />
+        <DashboardWelcomeModal />
+        <CompleteProfileModal 
+          isOpen={showCompleteProfile} 
+          onComplete={() => {
+            setShowCompleteProfile(false);
+            // Refresh session info to hide modal permanently
+            supabase.auth.refreshSession();
+          }} 
+        />
       </main>
 
       <style dangerouslySetInnerHTML={{
