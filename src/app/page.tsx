@@ -673,8 +673,9 @@ export default function Home() {
                                 Ver Oferta Exata
                               </p>
                             )}
-                            <span className="mt-3 w-full block text-center py-2.5 px-4 rounded-xl bg-[#FF2D55]/10 border border-[#FF2D55]/20 text-[#FF2D55] font-bold text-[15px] group-hover:bg-[#FF2D55] group-hover:text-white transition-all duration-300">
-                              Clique para Comprar
+                            <span className="mt-3 w-full block text-center py-2 px-3 rounded-xl bg-[#FF2D55]/10 border border-[#FF2D55]/20 text-[#FF2D55] font-bold text-[12px] sm:text-[15px] group-hover:bg-[#FF2D55] group-hover:text-white transition-all duration-300">
+                              <span className="hidden sm:inline">Clique para Comprar</span>
+                              <span className="sm:hidden">Comprar</span>
                             </span>
                           </div>
                         </div>
@@ -684,6 +685,41 @@ export default function Home() {
                 </div>
               </div>
             )}
+
+          {/* 🏷️ Códigos para Busca em Loja Física */}
+          {result.dados_tecnicos?.identificacao_tecnica && (() => {
+            const oem = result.dados_tecnicos.identificacao_tecnica.codigo_oem;
+            const marcas = result.dados_tecnicos.top_3_marcas || [];
+            const hasOem = oem && !oem.includes('Requer') && !oem.includes('Consultar') && !oem.includes('Consulte');
+            const codigosMarca = marcas.filter((m: any) =>
+              m.codigo_peca &&
+              !m.codigo_peca.includes('Consulte') &&
+              !m.codigo_peca.includes('Requer')
+            );
+            if (!hasOem && codigosMarca.length === 0) return null;
+            return (
+              <div className="rounded-[24px] bg-[#FF9F0A]/5 border border-[#FF9F0A]/25 p-5 md:p-6">
+                <h3 className="text-base font-bold text-[#FF9F0A] mb-3 flex items-center gap-2">
+                  <span>🏷️</span> Códigos para Busca em Loja Física ou Online
+                </h3>
+                <div className="flex flex-wrap gap-2 mb-3">
+                  {hasOem && (
+                    <div className="flex flex-col bg-[#FF9F0A]/10 border border-[#FF9F0A]/30 rounded-xl px-4 py-2.5">
+                      <span className="text-[10px] text-[#FF9F0A]/70 font-semibold uppercase tracking-wider">Cód. OEM (Montadora)</span>
+                      <span className="text-white font-bold text-[15px] tracking-wide font-mono">{oem}</span>
+                    </div>
+                  )}
+                  {codigosMarca.map((m: any, i: number) => (
+                    <div key={i} className="flex flex-col bg-white/5 border border-white/10 rounded-xl px-4 py-2.5">
+                      <span className="text-[10px] text-[#8E8E93] font-semibold uppercase tracking-wider">{m.marca}</span>
+                      <span className="text-white font-bold text-[14px] tracking-wide font-mono">{m.codigo_peca}</span>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-[#8E8E93] text-[12px]">Apresente esses códigos em lojas de autopeças ou use-os na busca do Mercado Livre para encontrar exatamente a peça correta.</p>
+              </div>
+            );
+          })()}
 
             {/* Analysis Container */}
             <div className="rounded-[32px] bg-[#1C1C1E]/60 backdrop-blur-xl border border-white/10 shadow-[0_8px_30px_rgb(0,0,0,0.5)] p-6 md:p-10">

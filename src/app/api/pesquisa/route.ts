@@ -78,19 +78,23 @@ function isTitleRelevant(title: string, queryYear: number | null, queryEngine: s
 }
 
 async function scrapeML(query: string, marca: string, idSuffix: string, expectedPartName: string) {
-    // ✅ Fix 5: URL de busca com termos limpos - o ML aceita melhor queries bem formatadas
     const cleanQuery = query.trim().replace(/\s+/g, ' ');
-    const formattedQuery = cleanQuery.toLowerCase().replace(/ /g, '-').replace(/[^a-z0-9-]/g, '');
-    
+
+    // Inclui a marca no termo de busca para diferenciar produtos entre as 3 marcas
+    // Isso evita que MANN, Mahle e Hengst retornem o mesmo anúncio
+    const queryComMarca = `${cleanQuery} ${marca}`.trim();
+    const formattedQuery = queryComMarca.toLowerCase().replace(/ /g, '-').replace(/[^a-z0-9-]/g, '');
+
     // Extrai ano e motorização para validação posterior dos resultados
     const queryYear = extractYearFromQuery(query);
     const queryEngine = extractEngineFromQuery(query);
-    
-    // Monta URL com filtro de ano se disponível (melhora precisão nos resultados)
-    let url = `https://lista.mercadolivre.com.br/${formattedQuery}_DisplayType_G_NoIndex_True`;
+
+    // URL ordenada por MENOR PREÇO (_OrderId_PRICE) para trazer a oferta mais barata primeiro
+    let url = `https://lista.mercadolivre.com.br/${formattedQuery}_OrderId_PRICE_DisplayType_G_NoIndex_True`;
     if (queryYear) {
         url += `#D[A${queryYear - 1}-${queryYear + 1}]`;
     }
+
 
     // ✅ Validação multi-palavra: extrai as palavras mais significativas da peça
     // Ignora stopwords vazias ('de', 'do', 'kit', 'par', 'jogo') e usa as substantivas
