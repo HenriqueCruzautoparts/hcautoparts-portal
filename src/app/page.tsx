@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useState, useEffect } from 'react';
 import { Search, LayoutDashboard, Activity, CheckCircle2, ImagePlus, Camera, X, LogIn, LogOut, User, Headset, Zap, Settings2, ChevronDown } from 'lucide-react';
@@ -627,11 +627,14 @@ export default function Home() {
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-3 sm:gap-6">
                   {result.ml_results.map((item: any) => {
                     let href = item.link;
-                    const mlAffiliateId = process.env.NEXT_PUBLIC_ML_AFFILIATE_ID;
-                    if (href.includes('mercadolivre.com.br') && mlAffiliateId) {
+                    // Injeta automaticamente os parâmetros da Central de Afiliados/Social de Henrique Cruz
+                    if (href.includes('mercadolivre.com.br')) {
                       try {
                         const url = new URL(href);
-                        url.searchParams.set('af_prid', mlAffiliateId);
+                        url.searchParams.set('matt_word', 'henrique_cruzn');
+                        url.searchParams.set('matt_tool', '81389334');
+                        url.searchParams.set('forceInApp', 'true');
+                        url.searchParams.set('ref', 'BFOG');
                         href = url.toString();
                       } catch (e) { }
                     }
