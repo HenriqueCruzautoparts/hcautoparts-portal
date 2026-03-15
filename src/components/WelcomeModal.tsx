@@ -76,9 +76,19 @@ export function WelcomeModal() {
                             <h3 className="font-semibold text-[#FFCC00] flex items-center mb-2">
                                 <AlertTriangle className="w-4 h-4 mr-2" /> Aviso Importante
                             </h3>
-                            <p className="text-[#E5E5EA] text-[14px]">
-                                O sistema está em desenvolvimento constante. Por ser uma inteligência artificial em fase de testes, <strong>pode cometer pequenos erros de interpretação ou links</strong>. Caso encontre problemas, use nossa Central de Suporte no menu.
+                            <p className="text-[#E5E5EA] text-[14px] mb-3">
+                                O sistema está em desenvolvimento constante. Por ser uma inteligência artificial em fase de testes, <strong>pode cometer pequenos erros de interpretação ou links</strong>. 
                             </p>
+                            
+                            <div className="mt-3 pt-3 border-t border-[#FFCC00]/10">
+                                <p className="text-[#FFCC00] text-[13px] font-semibold mb-1">Central de Suporte (Dúvidas ou Erros):</p>
+                                <p className="text-[#E5E5EA] text-[13px] flex items-center mt-1">
+                                    <span className="w-5 flex justify-center mr-1">📞</span> (63) 99952-6468
+                                </p>
+                                <p className="text-[#E5E5EA] text-[13px] flex items-center mt-1">
+                                    <span className="w-5 flex justify-center mr-1">✉️</span> autopartsiaapp@gmail.com
+                                </p>
+                            </div>
                         </div>
                     </div>
                 </div>
