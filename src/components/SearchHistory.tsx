@@ -22,9 +22,17 @@ export function SearchHistory({ onSelect }: SearchHistoryProps) {
     useEffect(() => {
         async function fetchHistory() {
             try {
+                // Pega a sessão atual para garantir que pegaremos o ID do usuário
+                const { data: { session } } = await supabase.auth.getSession();
+                if (!session?.user) {
+                    setLoading(false);
+                    return;
+                }
+
                 const { data, error } = await supabase
                     .from('search_history')
                     .select('*')
+                    .eq('user_id', session.user.id)
                     .order('created_at', { ascending: false })
                     .limit(4);
 
