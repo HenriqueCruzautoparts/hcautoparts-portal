@@ -97,33 +97,46 @@ async function scrapeML(query: string, marca: string, idSuffix: string, expected
 
 
     // ✅ Validação multi-palavra: extrai as palavras mais significativas da peça
-    // Ignora stopwords vazias ('de', 'do', 'kit', 'par', 'jogo') e usa as substantivas
-    const STOPWORDS = new Set(['de', 'do', 'da', 'dos', 'das', 'e', 'o', 'a', 'os', 'as', 'em', 'com', 'para', 'por']);
+    // Palavras que NÃO são o substantivo principal (genéricas demais, preposições ou qualidade)
+    const STOPWORDS = new Set(['de', 'do', 'da', 'dos', 'das', 'e', 'o', 'a', 'os', 'as', 'em', 'com', 'para', 'por', 'kit', 'par', 'jogo', 'conjunto', 'novo', 'original']);
     const normalizeText = (text: string) => text.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 
-    // Palavras-chave importantes da peça (as 3 primeiras com 4+ chars, excluindo stopwords)
+    // Todas as palavras significativas da peça (≥4 chars, sem stopwords)
     const partWords = normalizeText(expectedPartName)
         .split(/\s+/)
-        .filter(w => w.length >= 4 && !STOPWORDS.has(w))
-        .slice(0, 3);
+        .filter(w => w.length >= 4 && !STOPWORDS.has(w));
 
-    // Palavras de exclusão: se o título contiver alguma dessas mas NÃO contiver a peça correta
-    // Ex: busca por 'Junta Tampa Valvula' não deve aceitar 'Filtro Oleo'
+    // A palavra PRINCIPAL da peça (primeiro substantivo longo) - OBRIGATÓRIA no título
+    // Evita que acessórios/subcomponentes (vedação, tampinha) apareçam no lugar da peça principal
+    const GENERIC_QUALIFIERS = new Set(['superior', 'inferior', 'dianteiro', 'traseiro', 'esquerdo', 'direito', 'completo', 'completa', 'alta', 'baixa', 'lado', 'motor', 'cabecote']);
+    const mainPartWord = partWords.find(w => !GENERIC_QUALIFIERS.has(w) && w.length >= 5) || partWords[0];
+
+    // Pares conflitantes expandidos: [palavra_da_peca, palavra_inaceitavel_no_titulo]
     const CONFLICTING_PAIRS: Array<[string, string]> = [
-        ['junta', 'filtro'],   // Junta ≠ Filtro
-        ['filtro', 'junta'],   // Filtro ≠ Junta
+        ['junta', 'filtro'],
+        ['filtro', 'junta'],
         ['amortecedor', 'pastilha'],
         ['pastilha', 'amortecedor'],
         ['correia', 'filtro'],
         ['vela', 'filtro'],
         ['bomba', 'pastilha'],
+        ['reservatorio', 'vedacao'],
+        ['reservatorio', 'tampinha'],
+        ['reservatorio', 'tampa'],
+        ['disco', 'pastilha'],
+        ['pastilha', 'disco'],
+        ['radiador', 'mangueira'],
+        ['rolamento', 'correia'],
     ];
 
     const isValidProduct = (title: string) => {
-        if (partWords.length === 0) return true;
+        if (!mainPartWord) return true;
         const normalizedTitle = normalizeText(title);
 
-        // Verifica pares conflitantes: rejeita se o título tem palavra errada para essa peça
+        // REGRA 1: A palavra PRINCIPAL DEVE aparecer no título (obrigatório)
+        if (!normalizedTitle.includes(mainPartWord)) return false;
+
+        // REGRA 2: Pares conflitantes - rejeita peças incompatíveis
         for (const [partKey, badWord] of CONFLICTING_PAIRS) {
             const partHasKey = partWords.some(w => w.includes(partKey));
             const titleHasBad = normalizedTitle.includes(badWord);
@@ -131,8 +144,7 @@ async function scrapeML(query: string, marca: string, idSuffix: string, expected
             if (partHasKey && titleHasBad && !titleHasGood) return false;
         }
 
-        // Pelo menos 1 das palavras-chave significativas deve estar no título
-        return partWords.some(kw => normalizedTitle.includes(kw));
+        return true;
     };
 
     // ✅ Fix 3: Delay aleatório entre 300–800ms para simular comportamento humano
