@@ -624,7 +624,7 @@ export default function Home() {
                   Ofertas no Mercado Livre
                 </h2>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3 sm:gap-6">
                   {result.ml_results.map((item: any) => {
                     let href = item.link;
                     const mlAffiliateId = process.env.NEXT_PUBLIC_ML_AFFILIATE_ID;
@@ -655,25 +655,25 @@ export default function Home() {
                           </div>
                         )}
                         {/* Modified Image Container: Removed solid white bg, using mix-blend strategies or forced dark rendering if possible. Since ML images are usually JPG with white bg, we keep a subtle off-white core or use mix-blend-screen if appropriate, but white stands out nicely against dark gray. */}
-                        <div className="h-40 w-full bg-white/95 flex items-center justify-center p-4">
+                        <div className="h-28 sm:h-40 w-full bg-white/95 flex items-center justify-center p-2 sm:p-4">
                           <img src={item.thumbnail} alt={item.title} className="max-h-full max-w-full object-contain mix-blend-multiply" />
                         </div>
-                        <div className="p-4 flex flex-col flex-grow justify-between bg-[#2C2C2E]/80">
-                          <h3 className="text-[15px] font-medium text-white line-clamp-2 mb-3 leading-snug group-hover:text-[#FF2D55] transition-colors">
+                        <div className="p-2.5 sm:p-4 flex flex-col flex-grow justify-between bg-[#2C2C2E]/80">
+                          <h3 className="text-[11px] sm:text-[15px] font-medium text-white line-clamp-2 mb-2 sm:mb-3 leading-snug group-hover:text-[#FF2D55] transition-colors">
                             {item.title}
                           </h3>
                           <div>
                             {item.price !== null ? (
-                              <p className="text-[22px] font-bold text-white flex items-start">
-                                <span className="text-sm font-normal text-[#8E8E93] mr-1 mt-1">R$</span>
+                              <p className="text-base sm:text-[22px] font-bold text-white flex items-start">
+                                <span className="text-[10px] sm:text-sm font-normal text-[#8E8E93] mr-1 mt-0.5 sm:mt-1">R$</span>
                                 {new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2 }).format(item.price)}
                               </p>
                             ) : (
-                              <p className="text-[17px] font-bold text-white mt-1">
-                                Ver Oferta Exata
+                              <p className="text-[13px] sm:text-[17px] font-bold text-white mt-1">
+                                Ver Oferta
                               </p>
                             )}
-                            <span className="mt-3 w-full block text-center py-2 px-3 rounded-xl bg-[#FF2D55]/10 border border-[#FF2D55]/20 text-[#FF2D55] font-bold text-[12px] sm:text-[15px] group-hover:bg-[#FF2D55] group-hover:text-white transition-all duration-300">
+                            <span className="mt-2 sm:mt-3 w-full block text-center py-1.5 sm:py-2 px-2 sm:px-3 rounded-xl bg-[#FF2D55]/10 border border-[#FF2D55]/20 text-[#FF2D55] font-bold text-[11px] sm:text-[15px] group-hover:bg-[#FF2D55] group-hover:text-white transition-all duration-300">
                               <span className="hidden sm:inline">Clique para Comprar</span>
                               <span className="sm:hidden">Comprar</span>
                             </span>
