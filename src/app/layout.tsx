@@ -15,8 +15,30 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "AutoParts AI - Busca Inteligente",
-  description: "Portal de pesquisa inteligente de autopeças",
+  description: "Portal de pesquisa inteligente de autopeças. Encontre a peça certa em segundos com ajuda da nossa IA.",
   manifest: "/manifest.json",
+  openGraph: {
+    title: "AutoParts AI",
+    description: "Portal de pesquisa inteligente de autopeças",
+    url: "https://autoparts-portal-nine.vercel.app", // Domínio atual do Vercel
+    siteName: "AutoParts AI",
+    images: [
+      {
+        url: "/icon-512x512.png", // Ícone principal
+        width: 512,
+        height: 512,
+        alt: "AutoParts AI Logo"
+      }
+    ],
+    locale: "pt_BR",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "AutoParts AI",
+    description: "Portal de pesquisa inteligente de autopeças",
+    images: ["/icon-512x512.png"],
+  }
 };
 
 export const viewport: Viewport = {
