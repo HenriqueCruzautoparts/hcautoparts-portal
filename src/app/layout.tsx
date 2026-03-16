@@ -14,6 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://hcautoparts-portal.vercel.app"),
   title: "AutoParts AI - Busca Inteligente",
   description: "Portal de pesquisa inteligente de autopeças. Encontre a peça certa em segundos com ajuda da nossa IA.",
   manifest: "/manifest.json",
