@@ -17,6 +17,10 @@ export const metadata: Metadata = {
   title: "AutoParts AI - Busca Inteligente",
   description: "Portal de pesquisa inteligente de autopeças. Encontre a peça certa em segundos com ajuda da nossa IA.",
   manifest: "/manifest.json",
+  icons: {
+    icon: "/logo.png",
+    apple: "/icon-512x512.png",
+  },
   openGraph: {
     title: "AutoParts AI",
     description: "Portal de pesquisa inteligente de autopeças",
