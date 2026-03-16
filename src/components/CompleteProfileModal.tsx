@@ -52,7 +52,11 @@ export function CompleteProfileModal({ isOpen, onComplete }: CompleteProfileModa
         setError(null);
 
         try {
-            const { error } = await supabase.auth.updateUser({
+            const { data: { user }, error: userError } = await supabase.auth.getUser();
+            if (userError || !user) throw new Error("Usuário não logado.");
+
+            // 1. Atualiza nos metadados ocultos do Auth (usado para decidir esconder esse pop-up)
+            const { error: authError } = await supabase.auth.updateUser({
                 data: {
                     whatsapp: whatsapp,
                     cep: cep,
@@ -61,8 +65,26 @@ export function CompleteProfileModal({ isOpen, onComplete }: CompleteProfileModa
                     address_complement: addressComplement
                 }
             });
+            if (authError) throw authError;
 
-            if (error) throw error;
+            // 2. Atualiza (ou insere) na tabela pública Profiles (lida na tela de Perfil e outras)
+            const { error: profileError } = await supabase
+                .from('profiles')
+                .upsert({
+                    id: user.id,
+                    full_name: user.user_metadata?.full_name || user.user_metadata?.name || '',
+                    whatsapp: whatsapp,
+                    cep: cep,
+                    address: address,
+                    address_number: addressNumber,
+                    address_complement: addressComplement
+                }, { onConflict: 'id' });
+            
+            if (profileError) {
+                console.error("Erro ao salvar no profile:", profileError);
+                // Não falha o fluxo se der erro apenas aqui, pois no auth já salvou
+            }
+
             onComplete();
         } catch (err: any) {
             setError(err.message || 'Erro ao salvar os dados. Tente novamente.');
