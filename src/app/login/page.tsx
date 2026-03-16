@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { LayoutDashboard, Lock, Mail, ArrowRight, Loader2, User, Phone, MapPin, Home } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import Link from 'next/link';
+import Image from 'next/image';
 
 export default function LoginPage() {
     const router = useRouter();
@@ -135,8 +136,8 @@ export default function LoginPage() {
             <div className="z-10 w-full max-w-[500px]">
                 {/* Header */}
                 <div className="flex flex-col items-center justify-center text-center mb-8">
-                    <Link href="/" className="inline-flex items-center justify-center p-3 mb-6 rounded-2xl bg-[#1C1C1E] border border-white/5 shadow-sm backdrop-blur-md hover:bg-white/5 transition-colors group cursor-pointer">
-                        <LayoutDashboard className="w-8 h-8 text-[#FF2D55] group-hover:scale-110 transition-transform" />
+                    <Link href="/" className="inline-flex items-center justify-center p-2 mb-6 rounded-2xl bg-[#1C1C1E] border border-white/5 shadow-sm backdrop-blur-md hover:bg-white/5 transition-colors group cursor-pointer">
+                        <Image src="/logo.png" alt="AutoParts AI Logo" width={32} height={32} className="rounded-lg shadow-[0_0_10px_rgba(255,45,85,0.4)] group-hover:scale-110 transition-transform" />
                     </Link>
                     <h1 className="text-3xl font-bold tracking-tight text-white mb-2">
                         {isLogin ? 'Bem-vindo de volta' : 'Crie sua conta'}

@@ -10,6 +10,7 @@ import { DashboardWelcomeModal } from '@/components/DashboardWelcomeModal';
 import { CompleteProfileModal } from '@/components/CompleteProfileModal';
 import { supabase } from '@/lib/supabase';
 import Link from 'next/link';
+import Image from 'next/image';
 import { vehicleData } from '@/data/vehicles';
 
 export default function Home() {
@@ -126,7 +127,7 @@ export default function Home() {
       // Create a native canvas compressor to handle 5MB+ smartphone photos seamlessly
       const reader = new FileReader();
       reader.onloadend = () => {
-        const img = new Image();
+        const img = new window.Image();
         img.onload = () => {
           const canvas = document.createElement('canvas');
           let width = img.width;
@@ -344,7 +345,7 @@ export default function Home() {
         {/* Header Section */}
         <div className="flex flex-col items-center justify-center text-center mb-10 space-y-3">
           <div className="inline-flex items-center justify-center p-2 mb-2 rounded-2xl bg-[#1C1C1E] border border-white/5 shadow-sm backdrop-blur-md">
-            <LayoutDashboard className="w-6 h-6 text-[#FF2D55]" />
+            <Image src="/logo.png" alt="AutoParts AI Logo" width={28} height={28} className="rounded-lg shadow-[0_0_10px_rgba(255,45,85,0.4)]" />
             <span className="ml-2 text-lg font-semibold text-white tracking-tight">
               AutoParts AI
             </span>
