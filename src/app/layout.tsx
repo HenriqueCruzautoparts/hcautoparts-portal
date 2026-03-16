@@ -20,7 +20,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "AutoParts AI",
     description: "Portal de pesquisa inteligente de autopeças",
-    url: "https://autoparts-portal-nine.vercel.app", // Domínio atual do Vercel
+    url: "https://hcautoparts-portal.vercel.app", // Domínio atual do Vercel
     siteName: "AutoParts AI",
     images: [
       {
