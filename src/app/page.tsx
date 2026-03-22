@@ -833,9 +833,19 @@ export default function Home() {
                                 <span className="text-[#E5E5EA] font-mono text-[18px] font-black tracking-wider block">{marcaItem.codigo_peca}</span>
                               </div>
                               
-                              <p className="text-[14px] text-[#E5E5EA] flex-grow leading-relaxed">
+                              <p className="text-[14px] text-[#E5E5EA] flex-grow leading-relaxed mb-4">
                                 {marcaItem.justificativa}
                               </p>
+
+                              {/* Botão de Compra Individual */}
+                              <a
+                                href={`https://lista.mercadolivre.com.br/${marcaItem.termo_busca_mercadolivre?.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')}_OrderId_PRICE?matt_word=henrique_cruzn&matt_tool=81389334&forceInApp=true&ref=BFOG`}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="w-full mt-auto py-2.5 bg-white/5 hover:bg-[#FF2D55]/20 border border-white/10 hover:border-[#FF2D55]/30 rounded-xl text-white text-[13px] font-bold transition-all text-center flex items-center justify-center gap-2"
+                              >
+                                <span>🛒</span> Ver no Mercado Livre
+                              </a>
                             </div>
                           );
                         })}
