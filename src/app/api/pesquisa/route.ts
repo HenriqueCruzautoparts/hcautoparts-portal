@@ -45,9 +45,10 @@ async function getGeminiAnalysis(query: string, image?: string): Promise<GeminiR
     - Adicione AVISO no "breve_explicativo": "ATENÇÃO: Busca genérica. Especifique modelo, ano e motor para código exato."
     - Use termos AMPLOS nos links do Mercado Livre (sem marca específica).
 
-    REGRA 2 — ANTI-ALUCINAÇÃO EXTREMA PARA "codigo_peca" (marcas aftermarket):
-    - É SEU DEVER OBRIGATÓRIO tentar fornecer o Código OEM genuíno ou um Código de Referência Padrão de mercado válido. O painel requer códigos de peça para compras offline.
-    - Evite usar "Consulte o catálogo oficial do fabricante" a não ser que sinta risco zero de exatidão. Forneça o código da marca.
+    REGRA 2 — CÓDIGOS DE PEÇA (OBRIGATÓRIO):
+    - É SEU DEVER OBRIGATÓRIO fornecer o Código OEM genuíno e o Código da Marca Aftermarket correspondente. 
+    - O painel é usado por mecânicos que precisam do CÓDIGO EXATO para compra. 
+    - EVITE ao máximo "Consulte o catálogo". Pesquise em sua base interna até encontrar o código de referência cruzada correto para cada uma das 3 marcas.
 
     REGRA 3 — TERMOS DE BUSCA NO MERCADO LIVRE:
     - O campo "termo_busca_mercadolivre" será usado diretamente na API de busca do ML.

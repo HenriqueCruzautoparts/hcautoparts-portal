@@ -697,7 +697,7 @@ export default function Home() {
               <div className="rounded-[32px] bg-[#1C1C1E]/60 backdrop-blur-xl border border-white/10 p-5 md:p-6 shadow-[0_8px_30px_rgb(0,0,0,0.5)]">
                 <div className="flex flex-col md:flex-row gap-5 items-stretch">
                   
-                  {/* Códigos OEM da Peça e Alternativos (Prioridade Local) */}
+                  {/* Códigos OEM da Peça e Alternativos (Foco Visual no Código) */}
                   {(() => {
                     const oem = result.dados_tecnicos?.identificacao_tecnica?.codigo_oem;
                     const marcas = result.dados_tecnicos?.top_3_marcas || [];
@@ -708,33 +708,25 @@ export default function Home() {
                       !m.codigo_peca.includes('Requer') && m.codigo_peca.length > 3
                     );
                     
-                    const getSearchLink = (codigo: string) => `https://lista.mercadolivre.com.br/${codigo.trim().toLowerCase().replace(/[^a-z0-9-]/g, '')}_OrderId_PRICE?matt_word=henrique_cruzn&matt_tool=81389334&forceInApp=true&ref=BFOG`;
-
                     return (
                       <div className="flex-1 flex flex-col justify-between rounded-[20px] bg-black/40 border border-[#32ADE6]/20 p-4 sm:p-5">
                         <h3 className="text-[#32ADE6] font-bold text-[15px] mb-3 flex items-center gap-2">
                           <span>🏷️</span> Código da Peça e Alternativos
                         </h3>
-                        <div className="flex flex-col gap-2">
-                          <p className="text-[#8E8E93] text-[12px] mb-1">Clique num código para buscar o menor preço exato:</p>
+                        <div className="flex flex-col gap-3">
+                          <p className="text-[#8E8E93] text-[12px] mb-1">Use estes códigos para identificação ou compra offline:</p>
                           {hasOem && (
-                            <a href={getSearchLink(oem)} target="_blank" rel="noreferrer" className="flex flex-col bg-[#32ADE6]/10 border border-[#32ADE6]/30 hover:bg-[#32ADE6]/20 rounded-lg px-3 py-2 auto transition-colors cursor-pointer group mb-1">
-                              <span className="text-[10px] text-[#32ADE6]/90 font-bold uppercase tracking-wider mb-0.5 flex items-center justify-between">
-                                Montadora (Original)
-                                <span className="text-[10px] text-[#32ADE6] opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">Buscar <span>🔍</span></span>
-                              </span>
-                              <span className="text-white font-mono text-[16px] font-bold tracking-wider">{oem}</span>
-                            </a>
+                            <div className="flex flex-col bg-[#32ADE6]/10 border border-[#32ADE6]/30 rounded-lg px-4 py-3 mb-1">
+                              <span className="text-[10px] text-[#32ADE6]/90 font-bold uppercase tracking-wider mb-1">Montadora (Original/OEM)</span>
+                              <span className="text-white font-mono text-[20px] font-black tracking-widest drop-shadow-sm">{oem}</span>
+                            </div>
                           )}
-                          <div className="grid grid-cols-2 gap-2 mt-1">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-1">
                             {codigosMarca.map((m: any, i: number) => (
-                              <a key={`alt-${i}`} href={getSearchLink(m.codigo_peca)} target="_blank" rel="noreferrer" className="flex flex-col bg-white/5 border border-white/10 hover:border-white/20 hover:bg-white/10 rounded-lg px-3 py-2 cursor-pointer transition-colors group">
-                                <span className="text-[9px] text-[#8E8E93] group-hover:text-white font-bold uppercase tracking-wider text-ellipsis overflow-hidden flex items-center justify-between">
-                                  {m.marca}
-                                  <span className="text-[9px] text-white opacity-0 group-hover:opacity-100 transition-opacity">🔍</span>
-                                </span>
-                                <span className="text-white font-mono text-[13px] font-bold tracking-wider">{m.codigo_peca}</span>
-                              </a>
+                              <div key={`alt-${i}`} className="flex flex-col bg-white/5 border border-white/10 rounded-lg px-3 py-2">
+                                <span className="text-[9px] text-[#8E8E93] font-bold uppercase tracking-wider mb-0.5">{m.marca}</span>
+                                <span className="text-white font-mono text-[14px] font-bold tracking-wider">{m.codigo_peca}</span>
+                              </div>
                             ))}
                           </div>
                         </div>
@@ -828,7 +820,7 @@ export default function Home() {
                     </ul>
                   </div>
 
-                  {/* Top 3 Marcas com Links */}
+                  {/* Top 3 Marcas (Apenas Informações Técnicas) */}
                   {result.dados_tecnicos.top_3_marcas && result.dados_tecnicos.top_3_marcas.length > 0 && (
                     <div className="mt-8">
                       <h3 className="text-xl font-bold text-white mb-4 border-b border-white/10 pb-2 flex items-center justify-between">
@@ -838,15 +830,8 @@ export default function Home() {
                         {result.dados_tecnicos.top_3_marcas.map((marcaItem: any, idx: number) => {
                           const isBest = idx === 0;
                           
-                          // Gera link base para o código ou nome da peça caso não tenha código
-                          const queryTerm = (marcaItem.codigo_peca && !marcaItem.codigo_peca.includes('Consult'))
-                            ? marcaItem.codigo_peca 
-                            : (marcaItem.termo_busca_mercadolivre || `${result.dados_tecnicos?.identificacao_tecnica?.peca} ${marcaItem.marca}`);
-                          
-                          const mlLink = `https://lista.mercadolivre.com.br/${queryTerm.trim().toLowerCase().replace(/[^a-z0-9-]/g, '')}_OrderId_PRICE?matt_word=henrique_cruzn&matt_tool=81389334&forceInApp=true&ref=BFOG`;
-
                           return (
-                            <div key={`brand-${idx}`} className={`bg-[#2C2C2E]/60 border ${isBest ? 'border-[#FF2D55]/50 shadow-[0_4px_15px_rgba(255,45,85,0.15)] ring-1 ring-[#FF2D55]/20' : 'border-white/10'} rounded-2xl p-5 flex flex-col h-full relative overflow-hidden transition-transform hover:-translate-y-1`}>
+                            <div key={`brand-${idx}`} className={`bg-[#2C2C2E]/60 border ${isBest ? 'border-[#FF2D55]/50 shadow-[0_4px_15px_rgba(255,45,85,0.15)] ring-1 ring-[#FF2D55]/20' : 'border-white/10'} rounded-2xl p-6 flex flex-col h-full relative overflow-hidden`}>
                               
                               {/* Tag Melhor Opção */}
                               {isBest && (
@@ -855,24 +840,16 @@ export default function Home() {
                                 </div>
                               )}
 
-                              <h4 className={`text-xl font-bold mb-1 ${isBest ? 'text-[#FF2D55]' : 'text-white'}`}>{marcaItem.marca}</h4>
+                              <h4 className={`text-xl font-bold mb-3 ${isBest ? 'text-[#FF2D55]' : 'text-white'}`}>{marcaItem.marca}</h4>
                               
-                              <p className="text-sm text-white mb-3">
-                                <span className="font-semibold text-[#8E8E93]">Código:</span> <span className="font-mono bg-black/20 px-1.5 py-0.5 rounded text-[#E5E5EA]">{marcaItem.codigo_peca}</span>
-                              </p>
+                              <div className="bg-black/30 rounded-xl p-3 mb-4 border border-white/5">
+                                <span className="text-[10px] text-[#8E8E93] font-bold uppercase tracking-widest block mb-1">Código da Peça</span>
+                                <span className="text-[#E5E5EA] font-mono text-[18px] font-black tracking-wider block">{marcaItem.codigo_peca}</span>
+                              </div>
                               
-                              <p className="text-[13px] text-[#E5E5EA] flex-grow leading-relaxed mb-4">
+                              <p className="text-[14px] text-[#E5E5EA] flex-grow leading-relaxed">
                                 {marcaItem.justificativa}
                               </p>
-
-                              <a 
-                                href={mlLink}
-                                target="_blank"
-                                rel="noreferrer"
-                                className={`w-full text-center py-2.5 px-4 rounded-xl font-bold text-[13px] transition-all flex items-center justify-center gap-2 ${isBest ? 'bg-[#FF2D55] text-white hover:bg-[#ff0036] shadow-md' : 'bg-white/10 text-white hover:bg-white/20'}`}
-                              >
-                                <span>Buscar esta marca</span> 🔍
-                              </a>
                             </div>
                           );
                         })}
