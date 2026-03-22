@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
 
-export const maxDuration = 60; // Allow Vercel to run this function for up to 60 seconds
+export const maxDuration = 60;
 
 interface GeminiResponse {
     identificacao_tecnica: {
@@ -70,6 +70,34 @@ async function getGeminiAnalysis(query: string, image?: string): Promise<GeminiR
     REGRA 5 — FORMATO:
     - RETORNE APENAS JSON VÁLIDO.
     - TODOS os campos em Português do Brasil (PT-BR).
+
+    JSON OBRIGATÓRIO:
+    {
+      "identificacao_tecnica": {
+        "peca": "Nome Técnico Exato",
+        "breve_explicativo": "Função e importância da peça. Aviso de busca genérica se aplicável.",
+        "codigo_oem": "Código da Montadora EXATO ou 'Requer modelo exato'",
+        "nome_ingles": "Nome em inglês",
+        "veiculo_base": "Modelo exato com carroceria, ano e motor",
+        "validacao_catalogo": "Catálogo Oficial [Montadora]"
+      },
+      "intercambiabilidade": [
+        "Marca/Modelo/Carroceria (Ano) - Motorização — Plug and Play confirmed"
+      ],
+      "top_3_marcas": [
+        {
+          "marca": "NOME DA MARCA",
+          "codigo_peca": "Código exato OU 'Consulte o catálogo oficial do fabricante'",
+          "justificativa": "Motivo técnico da recomendação",
+          "termo_busca_mercadolivre": "[peça] [modelo] [marca]"
+        }
+      ],
+      "referencia_aliexpress": {
+        "termo_busca": "Código OEM ou nome em inglês",
+        "link_busca": "https://pt.aliexpress.com/w/wholesale-[termo-busca-encoded].html",
+        "recomendacao": "Análise objetiva de custo-benefício e riscos da importação"
+      }
+    }
     `;
 
     let contents: any[] = [];
@@ -93,7 +121,6 @@ async function getGeminiAnalysis(query: string, image?: string): Promise<GeminiR
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 contents,
-                // CORREÇÃO: Trava nativa do Gemini para sempre retornar JSON puro
                 generationConfig: {
                     responseMimeType: "application/json",
                 }
@@ -112,8 +139,9 @@ async function getGeminiAnalysis(query: string, image?: string): Promise<GeminiR
         const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
         if (!text) throw new Error("A IA não retornou conteúdo válido.");
 
-        // Como forçamos o responseMimeType, o parse direto é seguro
-        return JSON.parse(text) as GeminiResponse;
+        // Fallback de segurança caso a IA insista em colocar markdown mesmo com a trava
+        const cleanJson = text.replace(/^\s*\`\`\`json\s*/g, '').replace(/\s*\`\`\`\s*$/g, '').trim();
+        return JSON.parse(cleanJson) as GeminiResponse;
     } catch (e: any) {
         console.error("Erro na análise do Gemini:", e);
         throw e;
@@ -131,7 +159,6 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: "A query de pesquisa ou imagem é obrigatória." }, { status: 400 });
         }
 
-        // CORREÇÃO: E-mail de admin via variável de ambiente
         const isUnlimitedUser = user_email === process.env.ADMIN_EMAIL;
 
         if (user_id && !isUnlimitedUser) {
@@ -178,7 +205,6 @@ export async function POST(req: Request) {
             ml_results: []
         };
 
-        // CORREÇÃO: Uso correto do await para garantir a gravação no Supabase antes da função serverless morrer
         if (user_id) {
             try {
                 await supabase.from("search_history").delete().eq('user_id', user_id).eq('query', finalResponse.query);
@@ -192,7 +218,6 @@ export async function POST(req: Request) {
             }
         }
 
-        // CORREÇÃO: Uso correto do await para garantir a gravação do limite anônimo
         if (!user_id && anon_fingerprint) {
             const { data: existing } = await supabase
                 .from('anon_search_limits')
@@ -217,7 +242,6 @@ export async function POST(req: Request) {
     } catch (error: any) {
         console.error("Erro interno na rota /api/pesquisa:", error);
 
-        // CORREÇÃO: Await na gravação de logs de erro
         await supabase.from('system_errors').insert([{
             error_message: error.message || 'Erro desconhecido na API de Pesquisa',
             context: { origin: 'api_pesquisa', payload: requestContext }
