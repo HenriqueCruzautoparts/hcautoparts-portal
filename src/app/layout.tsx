@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://hcautoparts-portal.vercel.app"),
+  metadataBase: new URL("https://autoparts-portal.vercel.app"),
   title: "AutoParts AI - Busca Inteligente",
   description: "Portal de pesquisa inteligente de autopeças. Encontre a peça certa em segundos com ajuda da nossa IA.",
   manifest: "/manifest.json",
@@ -25,7 +25,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "AutoParts AI",
     description: "Portal de pesquisa inteligente de autopeças",
-    url: "https://hcautoparts-portal.vercel.app", // Domínio atual do Vercel
+    url: "https://autoparts-portal.vercel.app",
     siteName: "AutoParts AI",
     images: [
       {

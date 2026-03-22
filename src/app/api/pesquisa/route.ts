@@ -29,7 +29,11 @@ interface GeminiResponse {
 
 
 async function getGeminiAnalysis(query: string, image?: string): Promise<GeminiResponse> {
-    const apiKey = "AIzaSyA4Fpq1DqwMrCKAtrYZL67o9rLmK3oXjqg"; // Chave validada para Gemini 2.5-Flash
+    const apiKey = process.env.GEMINI_API_KEY;
+    
+    if (!apiKey) {
+        throw new Error("Erro de Configuração. A chave de API (GEMINI_API_KEY) não foi encontrada no servidor.");
+    }
     
     const MODEL_NAME = "gemini-2.5-flash";
     const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${apiKey}`;

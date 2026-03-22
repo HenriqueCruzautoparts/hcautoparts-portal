@@ -2,6 +2,7 @@
 
 import { ChevronLeft, LifeBuoy, Mail, MessageSquare } from 'lucide-react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useState } from 'react';
 
 export default function SupportPage() {
@@ -12,8 +13,6 @@ export default function SupportPage() {
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         setStatus('sending');
-
-        // Simulating a fast dispatch. Eventually, this could send an email or log an urgent alert.
         setTimeout(() => {
             setStatus('success');
             setSubject('');
@@ -25,11 +24,18 @@ export default function SupportPage() {
     return (
         <div className="min-h-screen bg-black text-white font-sans selection:bg-[#FF2D55]/30 p-4">
             <div className="max-w-2xl mx-auto py-10">
-                {/* Header Back Button */}
-                <Link href="/" className="inline-flex items-center text-[#8E8E93] hover:text-white transition-colors mb-8 group">
-                    <ChevronLeft className="w-5 h-5 mr-1 group-hover:-translate-x-1 transition-transform" />
-                    Voltar para Início
-                </Link>
+
+                {/* Header com logo */}
+                <div className="flex items-center justify-between mb-8">
+                    <Link href="/" className="inline-flex items-center text-[#8E8E93] hover:text-white transition-colors group">
+                        <ChevronLeft className="w-5 h-5 mr-1 group-hover:-translate-x-1 transition-transform" />
+                        Voltar para Início
+                    </Link>
+                    <Link href="/" className="inline-flex items-center justify-center p-2 rounded-2xl bg-[#1C1C1E] border border-white/5 shadow-sm backdrop-blur-md hover:bg-white/5 transition-colors group">
+                        <Image src="/logo.png" alt="AutoParts AI Logo" width={28} height={28} className="rounded-lg shadow-[0_0_10px_rgba(255,45,85,0.4)] group-hover:scale-110 transition-transform" />
+                        <span className="ml-2 text-sm font-semibold text-white tracking-tight">AutoParts AI</span>
+                    </Link>
+                </div>
 
                 <div className="flex flex-col items-center justify-center text-center mb-10">
                     <div className="w-16 h-16 rounded-full bg-[#32ADE6]/10 border border-[#32ADE6]/20 flex items-center justify-center mb-4">
@@ -42,24 +48,33 @@ export default function SupportPage() {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-                    {/* Direct Contact Options */}
-                    <div className="bg-[#1C1C1E]/60 backdrop-blur-xl border border-white/5 rounded-3xl p-6 shadow-sm flex flex-col items-center text-center">
-                        <MessageSquare className="w-6 h-6 text-[#34C759] mb-3" />
+                    {/* WhatsApp */}
+                    <a
+                        href="https://wa.me/5563981144408"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="bg-[#1C1C1E]/60 backdrop-blur-xl border border-white/5 rounded-3xl p-6 shadow-sm flex flex-col items-center text-center hover:border-[#34C759]/30 transition-colors group"
+                    >
+                        <MessageSquare className="w-6 h-6 text-[#34C759] mb-3 group-hover:scale-110 transition-transform" />
                         <h3 className="font-semibold text-white mb-1">WhatsApp</h3>
                         <p className="text-sm text-[#8E8E93] mb-4">Atendimento rápido das 08h às 18h.</p>
-                        <button className="w-full py-2.5 rounded-xl bg-[#34C759]/10 text-[#34C759] font-medium hover:bg-[#34C759]/20 transition-colors">
+                        <span className="w-full py-2.5 rounded-xl bg-[#34C759]/10 text-[#34C759] font-medium group-hover:bg-[#34C759]/20 transition-colors text-center">
                             Conversar Agora
-                        </button>
-                    </div>
+                        </span>
+                    </a>
 
-                    <div className="bg-[#1C1C1E]/60 backdrop-blur-xl border border-white/5 rounded-3xl p-6 shadow-sm flex flex-col items-center text-center">
-                        <Mail className="w-6 h-6 text-[#FFCC00] mb-3" />
+                    {/* E-mail */}
+                    <a
+                        href="mailto:suporte@hcautoparts.com.br"
+                        className="bg-[#1C1C1E]/60 backdrop-blur-xl border border-white/5 rounded-3xl p-6 shadow-sm flex flex-col items-center text-center hover:border-[#FFCC00]/30 transition-colors group"
+                    >
+                        <Mail className="w-6 h-6 text-[#FFCC00] mb-3 group-hover:scale-110 transition-transform" />
                         <h3 className="font-semibold text-white mb-1">E-mail</h3>
                         <p className="text-sm text-[#8E8E93] mb-4">Para dúvidas mais detalhadas ou parcerias.</p>
-                        <button className="w-full py-2.5 rounded-xl bg-[#FFCC00]/10 text-[#FFCC00] font-medium hover:bg-[#FFCC00]/20 transition-colors">
+                        <span className="w-full py-2.5 rounded-xl bg-[#FFCC00]/10 text-[#FFCC00] font-medium group-hover:bg-[#FFCC00]/20 transition-colors text-center">
                             Enviar E-mail
-                        </button>
-                    </div>
+                        </span>
+                    </a>
                 </div>
 
                 {/* Contact Form */}

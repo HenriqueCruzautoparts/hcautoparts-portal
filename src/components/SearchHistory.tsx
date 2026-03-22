@@ -12,32 +12,42 @@ type HistoryItem = {
 };
 
 interface SearchHistoryProps {
+    userId: string | null | undefined;
     onSelect: (query: string, result: string) => void;
 }
 
-export function SearchHistory({ onSelect }: SearchHistoryProps) {
+export function SearchHistory({ userId, onSelect }: SearchHistoryProps) {
     const [history, setHistory] = useState<HistoryItem[]>([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         async function fetchHistory() {
-            try {
-                // Pega a sessão atual para garantir que pegaremos o ID do usuário
-                const { data: { session } } = await supabase.auth.getSession();
-                if (!session?.user) {
-                    setLoading(false);
-                    return;
-                }
+            // Aguarda userId estar disponível; se não estiver logado, não busca
+            if (!userId) {
+                setLoading(false);
+                return;
+            }
 
+            try {
                 const { data, error } = await supabase
                     .from('search_history')
                     .select('*')
-                    .eq('user_id', session.user.id)
+                    .eq('user_id', userId)
                     .order('created_at', { ascending: false })
-                    .limit(4);
+                    .limit(20);
 
                 if (!error && data) {
-                    setHistory(data);
+                    const uniqueQueries = new Set();
+                    const deduplicated: HistoryItem[] = [];
+                    for (const item of data) {
+                        const lowerQuery = item.query.toLowerCase().trim();
+                        if (!uniqueQueries.has(lowerQuery)) {
+                            uniqueQueries.add(lowerQuery);
+                            deduplicated.push(item);
+                            if (deduplicated.length === 4) break;
+                        }
+                    }
+                    setHistory(deduplicated);
                 }
             } catch (err) {
                 console.error('Erro ao buscar histórico:', err);
@@ -47,7 +57,7 @@ export function SearchHistory({ onSelect }: SearchHistoryProps) {
         }
 
         fetchHistory();
-    }, []);
+    }, [userId]); // Re-executa quando userId mudar (login/logout)
 
     if (loading || history.length === 0) return null;
 

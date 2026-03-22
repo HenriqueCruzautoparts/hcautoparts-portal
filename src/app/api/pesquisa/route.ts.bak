@@ -1,13 +1,15 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
-import { Jimp } from "jimp";
+
+export const maxDuration = 60; // Allow Vercel to run this function for up to 60 seconds (prevents 504 Timeout)
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY as string);
 
 interface GeminiResponse {
     identificacao_tecnica: {
         peca: string;
+        breve_explicativo: string;
         codigo_oem: string;
         nome_ingles: string;
         veiculo_base: string;
@@ -27,9 +29,18 @@ interface GeminiResponse {
     };
 }
 
-async function scrapeML(query: string, marca: string, idSuffix: string) {
+async function scrapeML(query: string, marca: string, idSuffix: string, expectedPartName: string) {
     const formattedQuery = query.toLowerCase().replace(/ /g, '-').replace(/[^a-z0-9-]/g, '');
     const url = `https://lista.mercadolivre.com.br/${formattedQuery}_DisplayType_G_NoIndex_True`;
+
+    const normalizeText = (text: string) => text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    const baseWord = normalizeText(expectedPartName).split(' ')[0];
+
+    const isValidProduct = (title: string) => {
+        if (!baseWord || baseWord.length < 3) return true; // Se não tiver base válida, passa.
+        const normalizedTitle = normalizeText(title);
+        return new RegExp(`\\b${baseWord.replace(/[^a-z0-9]/g, '')}`).test(normalizedTitle);
+    };
 
     try {
         const res = await fetch(url, {
@@ -51,7 +62,7 @@ async function scrapeML(query: string, marca: string, idSuffix: string) {
                 try {
                     const parsed = JSON.parse(scriptMatch[1]);
                     if (parsed['@graph']) {
-                        const products = parsed['@graph'].filter((x: any) => x['@type'] === 'Product' && x.offers && x.offers.price);
+                        const products = parsed['@graph'].filter((x: any) => x['@type'] === 'Product' && x.offers && x.offers.price && isValidProduct(x.name || ''));
                         if (products.length > 0) {
                             jsonPayload = products[0];
                             break;
@@ -90,16 +101,20 @@ async function scrapeML(query: string, marca: string, idSuffix: string) {
             const parcelMatch = block.match(/<span class="poly-price__installments">([^<]+)<\/span>/);
 
             if (priceMatch && titleMatch) {
-                return {
-                    id: cleanLink.split('/')[3] + '-' + idSuffix,
-                    title: titleMatch[1].replace(/<[^>]+>/g, '').trim(),
-                    price: parseFloat(priceMatch[1].replace(/\./g, '').replace(',', '.')),
-                    link: cleanLink,
-                    thumbnail: imgMatch ? imgMatch[1] : 'https://http2.mlstatic.com/frontend-assets/ml-web-navigation/ui-navigation/6.6.73/mercadolibre/logo_large_25years@2x.png',
-                    brand: marca,
-                    coupon: couponMatch ? couponMatch[1].trim() : null,
-                    parcelamento: parcelMatch ? parcelMatch[1].replace(/<[^>]+>/g, '').trim() : "À vista"
-                };
+                const title = titleMatch[1].replace(/<[^>]+>/g, '').trim();
+
+                if (isValidProduct(title)) {
+                    return {
+                        id: cleanLink.split('/')[3] + '-' + idSuffix,
+                        title: title,
+                        price: parseFloat(priceMatch[1].replace(/\./g, '').replace(',', '.')),
+                        link: cleanLink,
+                        thumbnail: imgMatch ? imgMatch[1] : 'https://http2.mlstatic.com/frontend-assets/ml-web-navigation/ui-navigation/6.6.73/mercadolibre/logo_large_25years@2x.png',
+                        brand: marca,
+                        coupon: couponMatch ? couponMatch[1].trim() : null,
+                        parcelamento: parcelMatch ? parcelMatch[1].replace(/<[^>]+>/g, '').trim() : "À vista"
+                    };
+                }
             }
         }
 
@@ -129,19 +144,31 @@ async function getGeminiAnalysis(query: string, image?: string): Promise<GeminiR
     PERSONA: Você é um Especialista Sênior em Catálogos de Peças Automotivas.
     
     MISSÃO: 
-    1. Analisar a peça fornecida: ${query || "Imagem da peça."}.
-    2. Identificar exatamente o carro, ano, motor e peça necessária.
-    3. Recomendar as 3 Melhores Marcas PREMIUM disponíveis no Brasil.
-    4. Para cada marca recomendada, você DEVE gerar um "termo_busca_mercadolivre" EXTREMAMENTE ESPECÍFICO (Ex: "lanterna traseira palio 2010 magneti marelli") para que nosso robô busque o menor preço real no sistema da loja.
-    5. CRÍTICO: RETORNE TODAS AS INFORMAÇÕES, DESCRIÇÕES E JUSTIFICATIVAS EXCLUSIVAMENTE EM PORTUGUÊS DO BRASIL (PT-BR).
+    1. Analisar a pesquisa fornecida: ${query || "Imagem da peça."}.
+    2. REGRA ANTI-ALUCINAÇÃO GERAL: Se a pesquisa for GENÉRICA e não especificar modelo exato, ano e motorização:
+       - NÃO INVENTE códigos OEM ou da marca. Preencha-os como "Requer modelo exato" ou "Consultar Catálogo".
+       - Adicione no "breve_explicativo" um aviso CLARO: "ATENÇÃO: Sua busca foi muito genérica. Para garantir a peça e código corretos, especifique modelo, ano e motor exatos."
+       - Use termos abrangentes no Mercado Livre.
+    3. REGRA ANTI-ALUCINAÇÃO EXTREMA PARA "codigo_peca" (CÓDIGO DAS MARCAS AFTERMARKET):
+       - LLMs (incluindo você) FREQUENTEMENTE ERRAM códigos específicos de fabricantes paralelos (ex: MANN, MAHLE, Hengst, NGK).
+       - VOCÊ ESTÁ TERMINANTEMENTE PROIBIDO DE "CHUTAR", APROXIMAR OU DEDUZIR O CÓDIGO DA PEÇA.
+       - Por exemplo: O filtro de óleo do motor Audi/VW EA888 2.0 TSI (geração 1 e 2 blindado) geralmente NUNCA É o 'HU 6002 Z', e sim o 'W 719/45' da MANN ou 'OC 795' da MAHLE.
+       - SE VOCÊ NÃO TIVER 100% DE CERTEZA ABSOLUTA DE UM CATÁLOGO OFICIAL, É OBRIGATÓRIO PREENCHER O CAMPO "codigo_peca" EXATAMENTE COM O TEXTO: "Consulte o catálogo oficial do fabricante".
+       - É infinitamente preferível dizer "Consulte o catálogo" do que dar um código errado que fará o usuário comprar a peça incorreta.
+    4. Se a pesquisa FOR ESPECÍFICA (com modelo, ano e motor): Identifique EXATAMENTE UMA peça aplicável, fornecendo o "codigo_oem" correto (este você pode buscar na sua base de dados).
+    5. Recomendar as 3 Melhores Marcas PREMIUM disponíveis no Brasil para essa peça.
+    6. Para cada marca recomendada (em buscas específicas), você DEVE gerar um "termo_busca_mercadolivre" EXTREMAMENTE ESPECÍFICO (Nome da peça + Modelo + Marca da peça) focando em Lojas Confiáveis.
+    7. Forneça um "breve_explicativo" sobre a função e importância dessa peça.
+    8. CRÍTICO: RETORNE TODAS AS INFORMAÇÕES EXCLUSIVAMENTE EM PORTUGUÊS DO BRASIL (PT-BR).
 
-    REGRAS DE FORMATO JSON - VOCÊ DEVE RETORNAR APENAS ESTE JSON VÁLIDO:
+    REGRAS DE FORMATO JSON - RETORNE APENAS ESTE JSON VÁLIDO (SEM CHAVES EXTRAS):
     {
       "identificacao_tecnica": {
-        "peca": "Nome Técnico Exato em Português",
-        "codigo_oem": "Código da Montadora Principal",
-        "nome_ingles": "Nome da peça em inglês (Apenas neste campo)",
-        "veiculo_base": "Modelo exato, ano e motorização compatível (em português)",
+        "peca": "Nome Técnico Exato da Peça Singular",
+        "breve_explicativo": "Explicação da função da peça (Aviso da regra 2 se genérica)",
+        "codigo_oem": "Código da Montadora Principal (ou 'Requer modelo exato')",
+        "nome_ingles": "Nome da peça em inglês",
+        "veiculo_base": "Modelo exato, ano e motor compatível",
         "validacao_catalogo": "Ex: Catálogo Oficial Volkswagen"
       },
       "intercambiabilidade": [
@@ -150,15 +177,15 @@ async function getGeminiAnalysis(query: string, image?: string): Promise<GeminiR
       "top_3_marcas": [
         {
           "marca": "NOME DA MARCA",
-          "codigo_peca": "Código do Fabricante",
+          "codigo_peca": "SE NÃO TIVER CERTEZA ABSOLUTA USE O TEXTO: 'Consulte o catálogo oficial do fabricante'",
           "justificativa": "Por que esta marca?",
-          "termo_busca_mercadolivre": "TERMO HIPER ESPECÍFICO PARA BUSCA NO MERCADO LIVRE (Ex: amortecedor dianteiro gol g5 2010 cofap)"
+          "termo_busca_mercadolivre": "TERMO ESPECÍFICO PARA BUSCA NO ML"
         }
       ],
       "referencia_aliexpress": {
         "termo_busca": "Código OEM ou Nome em inglês",
         "link_busca": "URL de busca AliExpress",
-        "recomendacao": "É seguro importar?"
+        "recomendacao": "É seguro importar e vale a pena?"
       }
     }
     `;
@@ -166,12 +193,9 @@ async function getGeminiAnalysis(query: string, image?: string): Promise<GeminiR
     let result;
     if (image) {
         try {
+            // A imagem já vem comprimida do frontend (Canvas client-side)
             const rawBase64 = image.split(',')[1] || image;
-            const imageBuffer = Buffer.from(rawBase64, 'base64');
-            const jimpImage = await Jimp.read(imageBuffer);
-            jimpImage.scaleToFit({ w: 800, h: 800 });
-            const compressedBuffer = await jimpImage.getBuffer("image/jpeg");
-            const imageParts = [{ inlineData: { data: compressedBuffer.toString('base64'), mimeType: "image/jpeg" } }];
+            const imageParts = [{ inlineData: { data: rawBase64, mimeType: "image/jpeg" } }];
             result = await model.generateContent([promptMestre, ...imageParts]);
         } catch (imgError) {
             throw new Error("Falha ao processar a imagem enviada. Certifique-se de ser um formato válido.");
@@ -191,20 +215,43 @@ async function getGeminiAnalysis(query: string, image?: string): Promise<GeminiR
 }
 
 export async function POST(req: Request) {
+    let requestContext: any = {};
     try {
-        const { query, image } = await req.json();
+        const payload = await req.json();
+        requestContext = payload;
+        const { query, image, user_id, user_email } = payload;
 
         if (!query && !image) {
             return NextResponse.json({ error: "A query de pesquisa ou imagem é obrigatória." }, { status: 400 });
+        }
+
+        const isUnlimitedUser = user_email === 'henrike.henrique.cn94@gmail.com';
+
+        // Limite Mensal
+        if (user_id && !isUnlimitedUser) {
+            const startOfMonth = new Date();
+            startOfMonth.setDate(1);
+            startOfMonth.setHours(0, 0, 0, 0);
+
+            const { count, error: countError } = await supabase
+                .from('search_history')
+                .select('*', { count: 'exact', head: true })
+                .eq('user_id', user_id)
+                .gte('created_at', startOfMonth.toISOString());
+
+            if (count && count >= 15) {
+                return NextResponse.json({ error: "Você atingiu o limite mensal de 15 pesquisas gratuitas da Conta Base. Faça upgrade para continuar economizando!" }, { status: 403 });
+            }
         }
 
         // 1. Obter Inteligência do Gemini
         const aiAnalysis = await getGeminiAnalysis(query, image);
 
         // 2. Buscar Ofertas Reais Diretamente do Mercado Livre em Paralelo (Bypass de links quebrados)
+        const expectedPartName = aiAnalysis.identificacao_tecnica.peca;
         const mlPromises = (aiAnalysis.top_3_marcas || []).map((marcaItem, idx) => {
             if (marcaItem.termo_busca_mercadolivre) {
-                return scrapeML(marcaItem.termo_busca_mercadolivre, marcaItem.marca, idx.toString());
+                return scrapeML(marcaItem.termo_busca_mercadolivre, marcaItem.marca, idx.toString(), expectedPartName);
             }
             return Promise.resolve(null);
         });
@@ -227,13 +274,20 @@ export async function POST(req: Request) {
         // 4. Salvar Histórico async
         supabase
             .from("search_history")
-            .insert([{ query: finalResponse.query, result: JSON.stringify(finalResponse) }])
+            .insert([{ query: finalResponse.query, result: JSON.stringify(finalResponse), user_id: user_id || null }])
             .then(({ error }) => { if (error) console.error("Erro ao salvar histórico:", error); });
 
         return NextResponse.json(finalResponse);
 
     } catch (error: any) {
         console.error("Erro na API:", error);
+
+        // Registrar erro no painel do Supabase silenciosamente
+        supabase.from('system_errors').insert([{
+            error_message: error.message || 'Erro desconhecido na API de Pesquisa',
+            context: { origin: 'api_pesquisa', payload: requestContext }
+        }]).then();
+
         return NextResponse.json({ error: "Erro interno.", details: error.message }, { status: 500 });
     }
 }

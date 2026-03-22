@@ -7,8 +7,10 @@ import remarkGfm from 'remark-gfm';
 import { SearchHistory } from '@/components/SearchHistory';
 import { WelcomeModal } from '@/components/WelcomeModal';
 import { DashboardWelcomeModal } from '@/components/DashboardWelcomeModal';
+import { CompleteProfileModal } from '@/components/CompleteProfileModal';
 import { supabase } from '@/lib/supabase';
 import Link from 'next/link';
+import Image from 'next/image';
 import { vehicleData } from '@/data/vehicles';
 
 export default function Home() {
@@ -20,8 +22,10 @@ export default function Home() {
   const [imageBase64, setImageBase64] = useState<string | null>(null);
   const [user, setUser] = useState<any | null>(null);
   const [profile, setProfile] = useState<any | null>(null);
+  const [anonFingerprint, setAnonFingerprint] = useState<string | null>(null);
 
   const [activeTab, setActiveTab] = useState<'smart' | 'guided'>('smart');
+  const [showCompleteProfile, setShowCompleteProfile] = useState(false);
   const [guidedForm, setGuidedForm] = useState({
     montadora: '',
     modelo: '',
@@ -39,24 +43,75 @@ export default function Home() {
     setLoading(false);
   };
 
+  // Gera um fingerprint estável do dispositivo/navegador para rastrear limite anônimo no servidor
+  // Usa dados disponíveis sem libs externas: userAgent + timezone + idioma + resolução + canvas hash
+  const generateFingerprint = async (): Promise<string> => {
+    const components = [
+      navigator.userAgent,
+      navigator.language,
+      Intl.DateTimeFormat().resolvedOptions().timeZone,
+      `${screen.width}x${screen.height}x${screen.colorDepth}`,
+      navigator.hardwareConcurrency?.toString() || '0',
+      new Date().getTimezoneOffset().toString(),
+    ];
+    // Canvas fingerprint (hash visual do GPU/driver de renderização)
+    try {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.textBaseline = 'top';
+        ctx.font = '14px Arial';
+        ctx.fillText('AutoParts🔧', 2, 2);
+        components.push(canvas.toDataURL().slice(-50));
+      }
+    } catch (e) {}
+    const raw = components.join('|');
+    // Hash simples via Web Crypto API
+    const buffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(raw));
+    return Array.from(new Uint8Array(buffer)).map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 32);
+  };
+
   useEffect(() => {
     const fetchProfile = async (userId: string) => {
       const { data } = await supabase.from('profiles').select('full_name').eq('id', userId).single();
       setProfile(data);
     };
 
+    // Gera e armazena o fingerprint do dispositivo (persiste no sessionStorage para evitar recalcular)
+    const initFingerprint = async () => {
+      let fp = sessionStorage.getItem('ap_fp');
+      if (!fp) {
+        fp = await generateFingerprint();
+        sessionStorage.setItem('ap_fp', fp);
+      }
+      setAnonFingerprint(fp);
+    };
+    initFingerprint();
+
     // Check initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
-      if (session?.user) fetchProfile(session.user.id);
-      else setProfile(null);
+      if (session?.user) {
+        fetchProfile(session.user.id);
+        if (!session.user.user_metadata?.whatsapp) {
+          setShowCompleteProfile(true);
+        }
+      } else {
+        setProfile(null);
+      }
     });
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
-      if (session?.user) fetchProfile(session.user.id);
-      else setProfile(null);
+      if (session?.user) {
+        fetchProfile(session.user.id);
+        if (!session.user.user_metadata?.whatsapp) {
+          setShowCompleteProfile(true);
+        }
+      } else {
+        setProfile(null);
+      }
     });
 
     return () => subscription.unsubscribe();
@@ -72,7 +127,7 @@ export default function Home() {
       // Create a native canvas compressor to handle 5MB+ smartphone photos seamlessly
       const reader = new FileReader();
       reader.onloadend = () => {
-        const img = new Image();
+        const img = new window.Image();
         img.onload = () => {
           const canvas = document.createElement('canvas');
           let width = img.width;
@@ -134,10 +189,11 @@ export default function Home() {
       if (!finalQuery.trim() && !finalImage) return;
     }
 
+    // Verificação local rápida no localStorage (cache client-side, não é a fonte de verdade)
     if (!user) {
       const anonSearches = parseInt(localStorage.getItem('autoparts_anon_searches') || '0', 10);
       if (anonSearches >= 5) {
-        setError("Limite de 5 pesquisas gratuitas atingido! Crie sua conta gratuitamente para continuar economizando.");
+        setError("Você já utilizou suas 5 pesquisas gratuitas. Crie sua conta gratuitamente para continuar pesquisando sem limites!");
         return;
       }
     }
@@ -150,7 +206,13 @@ export default function Home() {
     setAbortController(controller);
 
     try {
-      const payload: any = { query: finalQuery, user_id: user?.id || null, user_email: user?.email || null };
+      // Envia também o fingerprint do dispositivo para o servidor validar o limite de forma persistente
+      const payload: any = {
+        query: finalQuery,
+        user_id: user?.id || null,
+        user_email: user?.email || null,
+        anon_fingerprint: !user ? (anonFingerprint || null) : null,
+      };
       if (finalImage) {
         payload.image = finalImage;
       }
@@ -165,9 +227,14 @@ export default function Home() {
       const data = await res.json();
 
       if (!res.ok) {
+        // Se o servidor sinalizou que precisa de cadastro, atualiza o contador local também
+        if (data.require_signup) {
+          localStorage.setItem('autoparts_anon_searches', '5');
+        }
         throw new Error(data.error || 'Erro ao buscar dados.');
       }
 
+      // Sincroniza o contador local com o servidor após pesquisa bem-sucedida
       if (!user) {
         const currentCount = parseInt(localStorage.getItem('autoparts_anon_searches') || '0', 10);
         localStorage.setItem('autoparts_anon_searches', (currentCount + 1).toString());
@@ -278,7 +345,7 @@ export default function Home() {
         {/* Header Section */}
         <div className="flex flex-col items-center justify-center text-center mb-10 space-y-3">
           <div className="inline-flex items-center justify-center p-2 mb-2 rounded-2xl bg-[#1C1C1E] border border-white/5 shadow-sm backdrop-blur-md">
-            <LayoutDashboard className="w-6 h-6 text-[#FF2D55]" />
+            <Image src="/logo.png" alt="AutoParts AI Logo" width={28} height={28} className="rounded-lg shadow-[0_0_10px_rgba(255,45,85,0.4)]" />
             <span className="ml-2 text-lg font-semibold text-white tracking-tight">
               AutoParts AI
             </span>
@@ -572,14 +639,17 @@ export default function Home() {
                   Ofertas no Mercado Livre
                 </h2>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3 sm:gap-6">
                   {result.ml_results.map((item: any) => {
                     let href = item.link;
-                    const mlAffiliateId = process.env.NEXT_PUBLIC_ML_AFFILIATE_ID;
-                    if (href.includes('mercadolivre.com.br') && mlAffiliateId) {
+                    // Injeta automaticamente os parâmetros da Central de Afiliados/Social de Henrique Cruz
+                    if (href.includes('mercadolivre.com.br')) {
                       try {
                         const url = new URL(href);
-                        url.searchParams.set('af_prid', mlAffiliateId);
+                        url.searchParams.set('matt_word', 'henrique_cruzn');
+                        url.searchParams.set('matt_tool', '81389334');
+                        url.searchParams.set('forceInApp', 'true');
+                        url.searchParams.set('ref', 'BFOG');
                         href = url.toString();
                       } catch (e) { }
                     }
@@ -603,35 +673,75 @@ export default function Home() {
                           </div>
                         )}
                         {/* Modified Image Container: Removed solid white bg, using mix-blend strategies or forced dark rendering if possible. Since ML images are usually JPG with white bg, we keep a subtle off-white core or use mix-blend-screen if appropriate, but white stands out nicely against dark gray. */}
-                        <div className="h-40 w-full bg-white/95 flex items-center justify-center p-4">
+                        <div className="h-28 sm:h-40 w-full bg-white/95 flex items-center justify-center p-2 sm:p-4">
                           <img src={item.thumbnail} alt={item.title} className="max-h-full max-w-full object-contain mix-blend-multiply" />
                         </div>
-                        <div className="p-4 flex flex-col flex-grow justify-between bg-[#2C2C2E]/80">
-                          <h3 className="text-[15px] font-medium text-white line-clamp-2 mb-3 leading-snug group-hover:text-[#FF2D55] transition-colors">
+                        <div className="p-2.5 sm:p-4 flex flex-col flex-grow justify-between bg-[#2C2C2E]/80">
+                          <h3 className="text-[11px] sm:text-[15px] font-medium text-white line-clamp-2 mb-2 sm:mb-3 leading-snug group-hover:text-[#FF2D55] transition-colors">
                             {item.title}
                           </h3>
                           <div>
                             {item.price !== null ? (
-                              <p className="text-[22px] font-bold text-white flex items-start">
-                                <span className="text-sm font-normal text-[#8E8E93] mr-1 mt-1">R$</span>
+                              <p className="text-base sm:text-[22px] font-bold text-white flex items-start">
+                                <span className="text-[10px] sm:text-sm font-normal text-[#8E8E93] mr-1 mt-0.5 sm:mt-1">R$</span>
                                 {new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2 }).format(item.price)}
                               </p>
                             ) : (
-                              <p className="text-[17px] font-bold text-white mt-1">
-                                Ver Oferta Exata
+                              <p className="text-[13px] sm:text-[17px] font-bold text-white mt-1">
+                                Ver Oferta
                               </p>
                             )}
-                            <span className="mt-3 w-full block text-center py-2.5 px-4 rounded-xl bg-[#FF2D55]/10 border border-[#FF2D55]/20 text-[#FF2D55] font-bold text-[15px] group-hover:bg-[#FF2D55] group-hover:text-white transition-all duration-300">
-                              Clique para Comprar
+                            <span className="mt-2 sm:mt-3 w-full block text-center py-1.5 sm:py-2 px-2 sm:px-3 rounded-xl bg-[#FF2D55]/10 border border-[#FF2D55]/20 text-[#FF2D55] font-bold text-[11px] sm:text-[15px] group-hover:bg-[#FF2D55] group-hover:text-white transition-all duration-300">
+                              <span className="hidden sm:inline">Clique para Comprar</span>
+                              <span className="sm:hidden">Comprar</span>
                             </span>
                           </div>
                         </div>
                       </a>
                     );
                   })}
+
+                  {/* 🏷️ 4º slot - Códigos para Busca em Loja Física */}
+                  {(() => {
+                    const oem = result.dados_tecnicos?.identificacao_tecnica?.codigo_oem;
+                    const marcas = result.dados_tecnicos?.top_3_marcas || [];
+                    const hasOem = oem && !oem.includes('Requer') && !oem.includes('Consultar') && !oem.includes('Consulte');
+                    const codigosMarca = marcas.filter((m: any) =>
+                      m.codigo_peca &&
+                      !m.codigo_peca.includes('Consulte') &&
+                      !m.codigo_peca.includes('Requer')
+                    );
+                    if (!hasOem && codigosMarca.length === 0) return null;
+                    return (
+                      <div className="col-span-1 md:col-span-3 flex flex-col rounded-2xl bg-[#FF9F0A]/5 border border-[#FF9F0A]/25 p-3 sm:p-5">
+                        <h3 className="text-[11px] sm:text-sm font-bold text-[#FF9F0A] mb-2 flex items-center gap-1.5">
+                          <span>🏷️</span>
+                          <span className="hidden sm:inline">Códigos para Busca em Loja Física</span>
+                          <span className="sm:hidden">Códigos da Peça</span>
+                        </h3>
+                        <div className="flex flex-col gap-1.5 sm:flex-row sm:flex-wrap sm:gap-2 flex-grow">
+                          {hasOem && (
+                            <div className="flex flex-col bg-[#FF9F0A]/10 border border-[#FF9F0A]/30 rounded-xl px-3 py-2">
+                              <span className="text-[9px] sm:text-[10px] text-[#FF9F0A]/70 font-semibold uppercase tracking-wider">OEM (Montadora)</span>
+                              <span className="text-white font-bold text-[13px] sm:text-[15px] tracking-wide font-mono">{oem}</span>
+                            </div>
+                          )}
+                          {codigosMarca.map((m: any, i: number) => (
+                            <div key={i} className="flex flex-col bg-white/5 border border-white/10 rounded-xl px-3 py-2">
+                              <span className="text-[9px] sm:text-[10px] text-[#8E8E93] font-semibold uppercase tracking-wider">{m.marca}</span>
+                              <span className="text-white font-bold text-[12px] sm:text-[14px] tracking-wide font-mono">{m.codigo_peca}</span>
+                            </div>
+                          ))}
+                        </div>
+                        <p className="text-[#8E8E93] text-[10px] sm:text-[12px] mt-2">Use em lojas físicas ou online para encontrar a peça exata.</p>
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
             )}
+
+
 
             {/* Analysis Container */}
             <div className="rounded-[32px] bg-[#1C1C1E]/60 backdrop-blur-xl border border-white/10 shadow-[0_8px_30px_rgb(0,0,0,0.5)] p-6 md:p-10">
@@ -759,6 +869,17 @@ export default function Home() {
             </div>
           </div>
         )}
+
+        <WelcomeModal />
+        <DashboardWelcomeModal />
+        <CompleteProfileModal 
+          isOpen={showCompleteProfile} 
+          onComplete={() => {
+            setShowCompleteProfile(false);
+            // Refresh session info to hide modal permanently
+            supabase.auth.refreshSession();
+          }} 
+        />
       </main>
 
       <style dangerouslySetInnerHTML={{
