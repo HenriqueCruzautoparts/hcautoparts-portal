@@ -37,7 +37,7 @@ async function getGeminiAnalysis(query: string, image?: string): Promise<GeminiR
     const promptMestre = `
     PERSONA: Você é um Especialista Sênior em Catálogos de Peças Automotivas com acesso a bancos de dados oficiais de todas as montadoras.
     
-    MISSÃO: Analisar a pesquisa: "${query || "Imagem da peça."}" e recomendar APENAS A MELHOR MARCA de peça de reposição (melhor custo-benefício e qualidade).
+    MISSÃO: Analisar a pesquisa: "${query || "Imagem da peça."}" e recomendar as 3 MELHORES MARCAS de peças aftermarket.
 
     REGRA 1 — ANTI-ALUCINAÇÃO GERAL:
     Se a pesquisa for GENÉRICA (sem modelo exato, ano e motorização):
@@ -83,9 +83,9 @@ async function getGeminiAnalysis(query: string, image?: string): Promise<GeminiR
       ],
       "top_3_marcas": [
         {
-          "marca": "NOME DA MELHOR MARCA (Fabricante Recomendado)",
+          "marca": "NOME DA MARCA",
           "codigo_peca": "Código exato OU 'Consulte o catálogo oficial do fabricante'",
-          "justificativa": "Motivo técnico detalhado da recomendação de ser a melhor escolha",
+          "justificativa": "Motivo técnico da recomendação",
           "termo_busca_mercadolivre": "[peça] [modelo] [marca]"
         }
       ],
