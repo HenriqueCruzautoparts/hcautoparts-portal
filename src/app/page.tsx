@@ -697,38 +697,24 @@ export default function Home() {
               <div className="rounded-[32px] bg-[#1C1C1E]/60 backdrop-blur-xl border border-white/10 p-5 md:p-6 shadow-[0_8px_30px_rgb(0,0,0,0.5)]">
                 <div className="flex flex-col md:flex-row gap-5 items-stretch">
                   
-                  {/* Códigos OEM da Peça e Alternativos (Foco Visual no Código) */}
+                  {/* Códigos OEM da Peça (Prioridade Local) */}
                   {(() => {
                     const oem = result.dados_tecnicos?.identificacao_tecnica?.codigo_oem;
-                    const marcas = result.dados_tecnicos?.top_3_marcas || [];
                     const hasOem = oem && !oem.includes('Requer') && !oem.includes('Consultar') && !oem.includes('Consulte') && oem.length > 3;
-                    const codigosMarca = marcas.filter((m: any) =>
-                      m.codigo_peca &&
-                      !m.codigo_peca.includes('Consulte') &&
-                      !m.codigo_peca.includes('Requer') && m.codigo_peca.length > 3
-                    );
                     
                     return (
                       <div className="flex-1 flex flex-col justify-between rounded-[20px] bg-black/40 border border-[#32ADE6]/20 p-4 sm:p-5">
                         <h3 className="text-[#32ADE6] font-bold text-[15px] mb-3 flex items-center gap-2">
-                          <span>🏷️</span> Código da Peça e Alternativos
+                          <span>🏷️</span> Código da Peça Original
                         </h3>
-                        <div className="flex flex-col gap-3">
-                          <p className="text-[#8E8E93] text-[12px] mb-1">Use estes códigos para identificação ou compra offline:</p>
+                        <div className="flex flex-col gap-2">
+                          <p className="text-[#8E8E93] text-[12px] mb-1">Use este código na autopeças ou concessionária local:</p>
                           {hasOem && (
-                            <div className="flex flex-col bg-[#32ADE6]/10 border border-[#32ADE6]/30 rounded-lg px-4 py-3 mb-1">
-                              <span className="text-[10px] text-[#32ADE6]/90 font-bold uppercase tracking-wider mb-1">Montadora (Original/OEM)</span>
-                              <span className="text-white font-mono text-[20px] font-black tracking-widest drop-shadow-sm">{oem}</span>
+                            <div className="flex flex-col bg-[#32ADE6]/10 border border-[#32ADE6]/30 rounded-lg px-3 py-2 mb-1">
+                              <span className="text-[10px] text-[#32ADE6]/90 font-bold uppercase tracking-wider mb-0.5">Montadora (OEM)</span>
+                              <span className="text-white font-mono text-[16px] font-bold tracking-wider">{oem}</span>
                             </div>
                           )}
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-1">
-                            {codigosMarca.map((m: any, i: number) => (
-                              <div key={`alt-${i}`} className="flex flex-col bg-white/5 border border-white/10 rounded-lg px-3 py-2">
-                                <span className="text-[9px] text-[#8E8E93] font-bold uppercase tracking-wider mb-0.5">{m.marca}</span>
-                                <span className="text-white font-mono text-[14px] font-bold tracking-wider">{m.codigo_peca}</span>
-                              </div>
-                            ))}
-                          </div>
                         </div>
                       </div>
                     );
