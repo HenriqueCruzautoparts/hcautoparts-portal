@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Search, LayoutDashboard, Activity, CheckCircle2, ImagePlus, Camera, X, LogIn, LogOut, User, Headset, Zap, Settings2, ChevronDown } from 'lucide-react';
+import { Search, LayoutDashboard, Activity, CheckCircle2, ImagePlus, Camera, X, LogIn, LogOut, User, Headset, Zap, Settings2, ChevronDown, Package, Loader2 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { SearchHistory } from '@/components/SearchHistory';
@@ -23,7 +23,6 @@ export default function Home() {
   const [user, setUser] = useState<any | null>(null);
   const [profile, setProfile] = useState<any | null>(null);
   const [anonFingerprint, setAnonFingerprint] = useState<string | null>(null);
-
   const [activeTab, setActiveTab] = useState<'smart' | 'guided'>('smart');
   const [showCompleteProfile, setShowCompleteProfile] = useState(false);
   const [guidedForm, setGuidedForm] = useState({
@@ -123,47 +122,52 @@ export default function Home() {
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      // Create a native canvas compressor to handle 5MB+ smartphone photos seamlessly
-      const reader = new FileReader();
-      reader.onloadend = () => {
+    if (!file) return;
+
+    // Valida tipo de arquivo
+    if (!file.type.startsWith('image/')) {
+      setError('Por favor, selecione um arquivo de imagem válido.');
+      return;
+    }
+
+    // Comprime via canvas para reduzir payload (max 1000x1000, 70% JPEG)
+    const reader = new FileReader();
+    reader.onerror = () => setError('Não foi possível ler o arquivo. Tente novamente.');
+    reader.onloadend = () => {
+      try {
         const img = new window.Image();
+        img.onerror = () => setError('Imagem inválida ou corrompida. Use JPG, PNG ou WEBP.');
         img.onload = () => {
-          const canvas = document.createElement('canvas');
-          let width = img.width;
-          let height = img.height;
-
-          // Max dimensions for Gemini and Payload limits
-          const MAX_WIDTH = 1000;
-          const MAX_HEIGHT = 1000;
-
-          if (width > height) {
-            if (width > MAX_WIDTH) {
-              height = Math.round((height * MAX_WIDTH) / width);
-              width = MAX_WIDTH;
+          try {
+            const canvas = document.createElement('canvas');
+            let width = img.width;
+            let height = img.height;
+            const MAX_WIDTH = 1000;
+            const MAX_HEIGHT = 1000;
+            if (width > height) {
+              if (width > MAX_WIDTH) { height = Math.round((height * MAX_WIDTH) / width); width = MAX_WIDTH; }
+            } else {
+              if (height > MAX_HEIGHT) { width = Math.round((width * MAX_HEIGHT) / height); height = MAX_HEIGHT; }
             }
-          } else {
-            if (height > MAX_HEIGHT) {
-              width = Math.round((width * MAX_HEIGHT) / height);
-              height = MAX_HEIGHT;
-            }
-          }
-
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext('2d');
-          if (ctx) {
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) { setError('Erro ao processar imagem. Tente novamente.'); return; }
             ctx.drawImage(img, 0, 0, width, height);
-            const compressedBase64 = canvas.toDataURL('image/jpeg', 0.7); // 70% quality JPEG
+            const compressedBase64 = canvas.toDataURL('image/jpeg', 0.7);
             setImagePreview(compressedBase64);
             setImageBase64(compressedBase64);
             setError(null);
+          } catch (canvasErr) {
+            setError('Erro ao comprimir a imagem. Tente uma foto diferente.');
           }
         };
         img.src = reader.result as string;
-      };
-      reader.readAsDataURL(file);
-    }
+      } catch (err) {
+        setError('Erro inesperado ao carregar a imagem.');
+      }
+    };
+    reader.readAsDataURL(file);
   };
 
   const clearImage = () => {
@@ -241,6 +245,47 @@ export default function Home() {
       }
 
       setResult(data);
+
+      // Nova Arquitetura Estável: Links de Afiliado Diretos (Sem chamadas à API do ML)
+      // O frontend apenas monta as URLs e exibe as informações levantadas pelo Gemini
+      if (data.dados_tecnicos?.top_3_marcas && Array.isArray(data.dados_tecnicos.top_3_marcas)) {
+        try {
+          const AFFILIATE_PARAMS = 'matt_word=henrique_cruzn&matt_tool=81389334&forceInApp=true&ref=BFOG';
+          
+          const mlCards = data.dados_tecnicos.top_3_marcas.map((marcaItem: any, index: number) => {
+            if (!marcaItem.termo_busca_mercadolivre) return null;
+            
+            // 1. Limpeza do Termo e Link Base
+            const searchTermBase = marcaItem.termo_busca_mercadolivre.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+            // 2. Aplicação do filtro de "Menor Preço" do ML ("_OrderId_PRICE")
+            const baseLink = `https://lista.mercadolivre.com.br/${searchTermBase}_OrderId_PRICE`;
+            // 3. Injeção do Afiliado Seguro
+            const finalLink = baseLink.includes('?') ? `${baseLink}&${AFFILIATE_PARAMS}` : `${baseLink}?${AFFILIATE_PARAMS}`;
+            
+            return {
+               id: `ml-card-${index}-${Date.now()}`,
+               title: `${marcaItem.marca} — ${data.dados_tecnicos?.identificacao_tecnica?.peca || 'Peça Automotiva'}`,
+               price: null,
+               link: finalLink,
+               thumbnail: null,
+               brand: marcaItem.marca,
+               coupon: null,
+               codigo_peca: marcaItem.codigo_peca,
+               justificativa: marcaItem.justificativa,
+               parcelamento: null
+            };
+          }).filter(Boolean);
+          
+          setResult((prev: any) => {
+             if (!prev) return prev;
+             return { ...prev, ml_results: mlCards };
+          });
+        } catch(e) {
+           console.error("Erro renderizando cards estáveis", e);
+        }
+      }
+
+
     } catch (err: any) {
       if (err.name === 'AbortError') {
         return; // Ignore abort errors quietly
@@ -348,6 +393,9 @@ export default function Home() {
             <Image src="/logo.png" alt="AutoParts AI Logo" width={28} height={28} className="rounded-lg shadow-[0_0_10px_rgba(255,45,85,0.4)]" />
             <span className="ml-2 text-lg font-semibold text-white tracking-tight">
               AutoParts AI
+            </span>
+            <span className="ml-2 text-[10px] font-bold text-[#FF2D55] bg-[#FF2D55]/10 border border-[#FF2D55]/30 px-2 py-0.5 rounded-full uppercase tracking-wider">
+              Beta 1.1
             </span>
           </div>
           <h1 className="text-4xl md:text-5xl font-bold tracking-tight text-white pb-1">
@@ -552,7 +600,7 @@ export default function Home() {
 
         {/* Search History */}
         {!result && !loading && (
-          <SearchHistory onSelect={handleHistorySelect} />
+          <SearchHistory userId={user?.id ?? null} onSelect={handleHistorySelect} />
         )}
 
         {/* Error State */}
@@ -627,116 +675,100 @@ export default function Home() {
 
         {/* Results Container */}
         {result && !loading && (
-          <div className="animate-in zoom-in-95 fade-in duration-500 max-w-4xl mx-auto group space-y-8">
+          <div className="animate-in zoom-in-95 fade-in duration-500 max-w-4xl mx-auto group space-y-8 relative">
+            
+            {/* Botão Nova Pesquisa e Ações */}
+            <div className="flex items-center justify-between mb-2">
+              <button
+                onClick={() => {
+                  setResult(null);
+                  setQuery('');
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                className="flex items-center px-4 py-2 bg-white/5 border border-white/10 hover:bg-white/10 rounded-xl text-white font-medium text-sm transition-all"
+              >
+                <Search className="w-4 h-4 mr-2 text-[#8E8E93]" />
+                Fazer Nova Pesquisa
+              </button>
+            </div>
 
-            {/* ML API Products Container */}
-            {result.ml_results && result.ml_results.length > 0 && (
-              <div className="rounded-[32px] bg-[#1C1C1E]/60 backdrop-blur-xl border border-white/10 p-6 md:p-8 shadow-[0_8px_30px_rgb(0,0,0,0.5)]">
-                <h2 className="text-xl font-bold text-white mb-6 flex items-center tracking-tight">
-                  <span className="w-8 h-8 rounded-full bg-[#FFCC00]/20 flex items-center justify-center mr-3 border border-[#FFCC00]/30">
-                    <span className="font-bold text-[#FFCC00] text-xs">ML</span>
-                  </span>
-                  Ofertas no Mercado Livre
-                </h2>
-
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-3 sm:gap-6">
-                  {result.ml_results.map((item: any) => {
-                    let href = item.link;
-                    // Injeta automaticamente os parâmetros da Central de Afiliados/Social de Henrique Cruz
-                    if (href.includes('mercadolivre.com.br')) {
-                      try {
-                        const url = new URL(href);
-                        url.searchParams.set('matt_word', 'henrique_cruzn');
-                        url.searchParams.set('matt_tool', '81389334');
-                        url.searchParams.set('forceInApp', 'true');
-                        url.searchParams.set('ref', 'BFOG');
-                        href = url.toString();
-                      } catch (e) { }
-                    }
-
-                    return (
-                      <a
-                        key={item.id}
-                        href={href}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="flex flex-col rounded-2xl bg-[#2C2C2E]/80 backdrop-blur-md border border-white/10 overflow-hidden transform hover:scale-[1.02] hover:border-[#FF2D55]/50 hover:shadow-[0_0_20px_rgba(255,45,85,0.15)] transition-all duration-300 relative group"
-                      >
-                        {item.brand && (
-                          <div className="absolute top-2 left-2 z-10 bg-black/80 backdrop-blur-md text-[#E5E5EA] border border-white/10 text-[11px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider">
-                            {item.brand}
-                          </div>
-                        )}
-                        {item.coupon && item.coupon !== "Desconto não disponível" && (
-                          <div className="absolute top-2 right-2 z-10 bg-[#32ADE6]/20 backdrop-blur-md border border-[#32ADE6]/50 text-[#32ADE6] text-[11px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider shadow-sm flex items-center">
-                            Cupom: {item.coupon}
-                          </div>
-                        )}
-                        {/* Modified Image Container: Removed solid white bg, using mix-blend strategies or forced dark rendering if possible. Since ML images are usually JPG with white bg, we keep a subtle off-white core or use mix-blend-screen if appropriate, but white stands out nicely against dark gray. */}
-                        <div className="h-28 sm:h-40 w-full bg-white/95 flex items-center justify-center p-2 sm:p-4">
-                          <img src={item.thumbnail} alt={item.title} className="max-h-full max-w-full object-contain mix-blend-multiply" />
-                        </div>
-                        <div className="p-2.5 sm:p-4 flex flex-col flex-grow justify-between bg-[#2C2C2E]/80">
-                          <h3 className="text-[11px] sm:text-[15px] font-medium text-white line-clamp-2 mb-2 sm:mb-3 leading-snug group-hover:text-[#FF2D55] transition-colors">
-                            {item.title}
-                          </h3>
-                          <div>
-                            {item.price !== null ? (
-                              <p className="text-base sm:text-[22px] font-bold text-white flex items-start">
-                                <span className="text-[10px] sm:text-sm font-normal text-[#8E8E93] mr-1 mt-0.5 sm:mt-1">R$</span>
-                                {new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2 }).format(item.price)}
-                              </p>
-                            ) : (
-                              <p className="text-[13px] sm:text-[17px] font-bold text-white mt-1">
-                                Ver Oferta
-                              </p>
-                            )}
-                            <span className="mt-2 sm:mt-3 w-full block text-center py-1.5 sm:py-2 px-2 sm:px-3 rounded-xl bg-[#FF2D55]/10 border border-[#FF2D55]/20 text-[#FF2D55] font-bold text-[11px] sm:text-[15px] group-hover:bg-[#FF2D55] group-hover:text-white transition-all duration-300">
-                              <span className="hidden sm:inline">Clique para Comprar</span>
-                              <span className="sm:hidden">Comprar</span>
-                            </span>
-                          </div>
-                        </div>
-                      </a>
-                    );
-                  })}
-
-                  {/* 🏷️ 4º slot - Códigos para Busca em Loja Física */}
+            {/* Opção Rápida de Compra Local e ML */}
+            {(result.dados_tecnicos?.top_3_marcas && result.dados_tecnicos.top_3_marcas.length > 0) && (
+              <div className="rounded-[32px] bg-[#1C1C1E]/60 backdrop-blur-xl border border-white/10 p-5 md:p-6 shadow-[0_8px_30px_rgb(0,0,0,0.5)]">
+                <div className="flex flex-col md:flex-row gap-5 items-stretch">
+                  
+                  {/* Códigos OEM da Peça (Prioridade Local) */}
                   {(() => {
                     const oem = result.dados_tecnicos?.identificacao_tecnica?.codigo_oem;
                     const marcas = result.dados_tecnicos?.top_3_marcas || [];
-                    const hasOem = oem && !oem.includes('Requer') && !oem.includes('Consultar') && !oem.includes('Consulte');
+                    const hasOem = oem && !oem.includes('Requer') && !oem.includes('Consultar') && !oem.includes('Consulte') && oem.length > 3;
                     const codigosMarca = marcas.filter((m: any) =>
                       m.codigo_peca &&
                       !m.codigo_peca.includes('Consulte') &&
-                      !m.codigo_peca.includes('Requer')
+                      !m.codigo_peca.includes('Requer') && m.codigo_peca.length > 3
                     );
-                    if (!hasOem && codigosMarca.length === 0) return null;
+                    
                     return (
-                      <div className="col-span-1 md:col-span-3 flex flex-col rounded-2xl bg-[#FF9F0A]/5 border border-[#FF9F0A]/25 p-3 sm:p-5">
-                        <h3 className="text-[11px] sm:text-sm font-bold text-[#FF9F0A] mb-2 flex items-center gap-1.5">
-                          <span>🏷️</span>
-                          <span className="hidden sm:inline">Códigos para Busca em Loja Física</span>
-                          <span className="sm:hidden">Códigos da Peça</span>
+                      <div className="flex-1 flex flex-col justify-between rounded-[20px] bg-black/40 border border-[#32ADE6]/20 p-4 sm:p-5">
+                        <h3 className="text-[#32ADE6] font-bold text-[15px] mb-3 flex items-center gap-2">
+                          <span>🏷️</span> Código da Peça Original
                         </h3>
-                        <div className="flex flex-col gap-1.5 sm:flex-row sm:flex-wrap sm:gap-2 flex-grow">
+                        <div className="flex flex-col gap-2">
+                          <p className="text-[#8E8E93] text-[12px] mb-1">Use este código na autopeças ou concessionária local:</p>
                           {hasOem && (
-                            <div className="flex flex-col bg-[#FF9F0A]/10 border border-[#FF9F0A]/30 rounded-xl px-3 py-2">
-                              <span className="text-[9px] sm:text-[10px] text-[#FF9F0A]/70 font-semibold uppercase tracking-wider">OEM (Montadora)</span>
-                              <span className="text-white font-bold text-[13px] sm:text-[15px] tracking-wide font-mono">{oem}</span>
+                            <div className="flex flex-col bg-[#32ADE6]/10 border border-[#32ADE6]/30 rounded-lg px-3 py-2 mb-1">
+                              <span className="text-[10px] text-[#32ADE6]/90 font-bold uppercase tracking-wider mb-0.5">Montadora (OEM)</span>
+                              <span className="text-white font-mono text-[16px] font-bold tracking-wider">{oem}</span>
                             </div>
                           )}
-                          {codigosMarca.map((m: any, i: number) => (
-                            <div key={i} className="flex flex-col bg-white/5 border border-white/10 rounded-xl px-3 py-2">
-                              <span className="text-[9px] sm:text-[10px] text-[#8E8E93] font-semibold uppercase tracking-wider">{m.marca}</span>
-                              <span className="text-white font-bold text-[12px] sm:text-[14px] tracking-wide font-mono">{m.codigo_peca}</span>
-                            </div>
-                          ))}
+                          <div className="flex flex-wrap gap-2">
+                            {codigosMarca.map((m: any, i: number) => (
+                              <div key={i} className="flex flex-col bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 flex-1 min-w-[100px]">
+                                <span className="text-[9px] text-[#8E8E93] font-bold uppercase tracking-wider text-ellipsis overflow-hidden">{m.marca}</span>
+                                <span className="text-white font-mono text-[13px] font-bold tracking-wider">{m.codigo_peca}</span>
+                              </div>
+                            ))}
+                          </div>
                         </div>
-                        <p className="text-[#8E8E93] text-[10px] sm:text-[12px] mt-2">Use em lojas físicas ou online para encontrar a peça exata.</p>
                       </div>
                     );
                   })()}
+
+                  {/* Mega Botão Centralizado para Compra Rápida Online */}
+                  {(() => {
+                     // Utilizando a palavra-chave cravada da MELHOR MARCA recomendada pela IA
+                     const topMarca = result.dados_tecnicos?.top_3_marcas?.[0];
+                     const searchWord = topMarca?.termo_busca_mercadolivre 
+                         ? topMarca.termo_busca_mercadolivre 
+                         : `${result.dados_tecnicos?.identificacao_tecnica?.peca || ''}`;
+                         
+                     const optimizedTerm = searchWord.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+                     const link = `https://lista.mercadolivre.com.br/${optimizedTerm}_OrderId_PRICE?matt_word=henrique_cruzn&matt_tool=81389334&forceInApp=true&ref=BFOG`;
+                     
+                     return (
+                      <a
+                        href={link}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex-1 flex flex-col items-center justify-center p-5 rounded-[20px] bg-gradient-to-r from-[#FF2D55] to-[#ff0036] text-white transition-all duration-300 shadow-[0_4px_20px_rgba(255,45,85,0.4)] hover:shadow-[0_8px_30px_rgba(255,45,85,0.6)] hover:scale-[1.02] group cursor-pointer"
+                      >
+                        <span className="font-extrabold text-[18px] sm:text-[22px] flex items-center justify-center text-center gap-2 drop-shadow-md mb-2">
+                          <span>📦</span>
+                          <span>Comprar no Mercado Livre</span>
+                        </span>
+                        {topMarca && (
+                          <span className="text-[12px] sm:text-[13px] font-medium opacity-95 text-center px-4 mb-3">
+                            Melhor Qualidade: <strong>{topMarca.marca}</strong>
+                          </span>
+                        )}
+                        <span className="text-[11px] uppercase tracking-[0.15em] font-semibold flex items-center gap-2 mt-auto bg-black/20 py-1.5 px-3 rounded-full border border-black/10">
+                          <span className="w-2 h-2 rounded-full bg-[#FFCC00] animate-pulse"></span>
+                          Pesquisar Menor Preço
+                        </span>
+                      </a>
+                     );
+                  })()}
+                  
                 </div>
               </div>
             )}
@@ -788,18 +820,18 @@ export default function Home() {
                     </ul>
                   </div>
 
-                  {/* Top 3 Marcas */}
+                  {/* Melhor Marca Recomendada */}
                   {result.dados_tecnicos.top_3_marcas && result.dados_tecnicos.top_3_marcas.length > 0 && (
                     <div>
-                      <h3 className="text-xl font-bold text-white mb-4 border-b border-white/10 pb-2">⭐ Top 3 Melhores Marcas (Recomendação IA)</h3>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        {result.dados_tecnicos.top_3_marcas.map((marcaItem: any, idx: number) => (
-                          <div key={idx} className="bg-[#2C2C2E]/60 border border-white/10 rounded-2xl p-4 flex flex-col h-full">
-                            <h4 className="text-lg font-bold text-[#FF2D55] mb-1">{marcaItem.marca}</h4>
-                            <p className="text-sm text-white mb-3">
-                              <span className="font-semibold text-[#8E8E93]">Código:</span> {marcaItem.codigo_peca}
+                      <h3 className="text-xl font-bold text-white mb-4 border-b border-white/10 pb-2">⭐ Melhor Marca (Recomendação IA)</h3>
+                      <div className="grid grid-cols-1 gap-4">
+                        {result.dados_tecnicos.top_3_marcas.slice(0, 1).map((marcaItem: any, idx: number) => (
+                          <div key={idx} className="bg-[#2C2C2E]/60 border border-[#FF2D55]/30 rounded-2xl p-6 flex flex-col h-full shadow-[0_4px_20px_rgba(255,45,85,0.15)]">
+                            <h4 className="text-2xl font-bold text-[#FF2D55] mb-2">{marcaItem.marca}</h4>
+                            <p className="text-base text-white mb-4">
+                              <span className="font-semibold text-[#8E8E93]">Código da Peça:</span> <span className="font-mono bg-black/30 px-2 py-1 rounded text-lg">{marcaItem.codigo_peca}</span>
                             </p>
-                            <p className="text-sm text-[#E5E5EA] flex-grow">
+                            <p className="text-[15px] text-[#E5E5EA] flex-grow leading-relaxed border-t border-white/10 pt-4 mt-2">
                               {marcaItem.justificativa}
                             </p>
                           </div>
@@ -870,13 +902,10 @@ export default function Home() {
           </div>
         )}
 
-        <WelcomeModal />
-        <DashboardWelcomeModal />
         <CompleteProfileModal 
           isOpen={showCompleteProfile} 
           onComplete={() => {
             setShowCompleteProfile(false);
-            // Refresh session info to hide modal permanently
             supabase.auth.refreshSession();
           }} 
         />
