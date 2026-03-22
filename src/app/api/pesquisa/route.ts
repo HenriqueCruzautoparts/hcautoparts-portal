@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
 
-export const maxDuration = 60; // Allow Vercel to run this function for up to 60 seconds (prevents 504 Timeout)
-
+export const maxDuration = 60; // Allow Vercel to run this function for up to 60 seconds
 
 interface GeminiResponse {
     identificacao_tecnica: {
@@ -27,14 +26,13 @@ interface GeminiResponse {
     };
 }
 
-
 async function getGeminiAnalysis(query: string, image?: string): Promise<GeminiResponse> {
     const apiKey = process.env.GEMINI_API_KEY;
-    
+
     if (!apiKey) {
         throw new Error("Erro de Configuração. A chave de API (GEMINI_API_KEY) não foi encontrada no servidor.");
     }
-    
+
     const MODEL_NAME = "gemini-2.5-flash";
     const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${apiKey}`;
 
@@ -70,36 +68,8 @@ async function getGeminiAnalysis(query: string, image?: string): Promise<GeminiR
     - NÃO liste veículos "possivelmente compatíveis".
 
     REGRA 5 — FORMATO:
-    - RETORNE APENAS JSON VÁLIDO, SEM texto antes ou depois, SEM blocos de código (sem \`\`\`json).
+    - RETORNE APENAS JSON VÁLIDO.
     - TODOS os campos em Português do Brasil (PT-BR).
-
-    JSON OBRIGATÓRIO:
-    {
-      "identificacao_tecnica": {
-        "peca": "Nome Técnico Exato",
-        "breve_explicativo": "Função e importância da peça. Aviso de busca genérica se aplicável.",
-        "codigo_oem": "Código da Montadora EXATO ou 'Requer modelo exato'",
-        "nome_ingles": "Nome em inglês",
-        "veiculo_base": "Modelo exato com carroceria, ano e motor",
-        "validacao_catalogo": "Catálogo Oficial [Montadora]"
-      },
-      "intercambiabilidade": [
-        "Marca/Modelo/Carroceria (Ano) - Motorização — Plug and Play confirmed"
-      ],
-      "top_3_marcas": [
-        {
-          "marca": "NOME DA MARCA",
-          "codigo_peca": "Código exato OU 'Consulte o catálogo oficial do fabricante'",
-          "justificativa": "Motivo técnico da recomendação",
-          "termo_busca_mercadolivre": "[peça] [modelo] [marca]"
-        }
-      ],
-      "referencia_aliexpress": {
-        "termo_busca": "Código OEM ou nome em inglês",
-        "link_busca": "https://pt.aliexpress.com/w/wholesale-[termo-busca-encoded].html",
-        "recomendacao": "Análise objetiva de custo-benefício e riscos da importação"
-      }
-    }
     `;
 
     let contents: any[] = [];
@@ -107,13 +77,13 @@ async function getGeminiAnalysis(query: string, image?: string): Promise<GeminiR
         const rawBase64 = image.split(',')[1] || image;
         contents = [{
             parts: [
-                { text: promptMestre.replace('\${query || "Imagem da peça."}', query || 'Analise esta imagem.') },
+                { text: promptMestre },
                 { inline_data: { mime_type: "image/jpeg", data: rawBase64 } }
             ]
         }];
     } else {
         contents = [{
-            parts: [{ text: promptMestre.replace('\${query || "Imagem da peça."}', query) }]
+            parts: [{ text: promptMestre }]
         }];
     }
 
@@ -121,11 +91,17 @@ async function getGeminiAnalysis(query: string, image?: string): Promise<GeminiR
         const res = await fetch(API_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ contents })
+            body: JSON.stringify({
+                contents,
+                // CORREÇÃO: Trava nativa do Gemini para sempre retornar JSON puro
+                generationConfig: {
+                    responseMimeType: "application/json",
+                }
+            })
         });
 
         const data = await res.json();
-        
+
         if (data.error) {
             if (data.error.status === 'RESOURCE_EXHAUSTED' || data.error.code === 429) {
                 throw new Error("Servidores da Inteligência Artificial sobrecarregados no momento. Por favor, aguarde 1 a 2 minutos e tente novamente.");
@@ -136,8 +112,8 @@ async function getGeminiAnalysis(query: string, image?: string): Promise<GeminiR
         const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
         if (!text) throw new Error("A IA não retornou conteúdo válido.");
 
-        const cleanJson = text.replace(/^\s*\`\`\`json\s*/g, '').replace(/\s*\`\`\`\s*$/g, '').trim();
-        return JSON.parse(cleanJson) as GeminiResponse;
+        // Como forçamos o responseMimeType, o parse direto é seguro
+        return JSON.parse(text) as GeminiResponse;
     } catch (e: any) {
         console.error("Erro na análise do Gemini:", e);
         throw e;
@@ -155,9 +131,9 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: "A query de pesquisa ou imagem é obrigatória." }, { status: 400 });
         }
 
-        const isUnlimitedUser = user_email === 'henrike.henrique.cn94@gmail.com';
+        // CORREÇÃO: E-mail de admin via variável de ambiente
+        const isUnlimitedUser = user_email === process.env.ADMIN_EMAIL;
 
-        // Limite Mensal para usuários logados
         if (user_id && !isUnlimitedUser) {
             const startOfMonth = new Date();
             startOfMonth.setDate(1);
@@ -174,8 +150,6 @@ export async function POST(req: Request) {
             }
         }
 
-        // ✅ Limite persistente para usuários ANÔNIMOS por fingerprint (lado servidor)
-        // Isso impede o bypass por limpeza de localStorage ou troca de aba/dia
         if (!user_id && anon_fingerprint) {
             const { data: anonRecord } = await supabase
                 .from('anon_search_limits')
@@ -191,10 +165,8 @@ export async function POST(req: Request) {
             }
         }
 
-        // 1. Obter Inteligência do Gemini
         const aiAnalysis = await getGeminiAnalysis(query, image);
 
-        // 2. Consolidar apenas a Inteligência Artifical (ML será carregado pelo frontend)
         const finalResponse = {
             query: query || "Busca por Imagem",
             dados_tecnicos: {
@@ -203,30 +175,24 @@ export async function POST(req: Request) {
                 top_3_marcas: aiAnalysis.top_3_marcas,
                 referencia_aliexpress: aiAnalysis.referencia_aliexpress
             },
-            ml_results: [] // Opcional, mantido como array vazio para compatibilidade inicial do frontend
+            ml_results: []
         };
 
-        // 4. Salvar Histórico async (evitando duplicatas para usuários logados) e Manutenção do DB
+        // CORREÇÃO: Uso correto do await para garantir a gravação no Supabase antes da função serverless morrer
         if (user_id) {
-            const saveHistory = async () => {
-                try {
-                    // Remove busca anterior idêntica para não poluir o histórico com repetidas
-                    await supabase.from("search_history").delete().eq('user_id', user_id).eq('query', finalResponse.query);
-                    await supabase.from("search_history").insert([{ query: finalResponse.query, result: JSON.stringify(finalResponse), user_id: user_id }]);
-                    
-                    // Método Anti-Erro: Expurgo Automático do Banco (mantendo-o "leve")
-                    // Deleta pesquisas com mais de 30 dias do usuário silenciosamente
-                    const thirtyDaysAgo = new Date();
-                    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-                    await supabase.from("search_history").delete().eq('user_id', user_id).lt('created_at', thirtyDaysAgo.toISOString());
-                } catch (err) {
-                    console.error("Erro ao salvar histórico/limpar banco:", err);
-                }
-            };
-            saveHistory();
+            try {
+                await supabase.from("search_history").delete().eq('user_id', user_id).eq('query', finalResponse.query);
+                await supabase.from("search_history").insert([{ query: finalResponse.query, result: JSON.stringify(finalResponse), user_id: user_id }]);
+
+                const thirtyDaysAgo = new Date();
+                thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+                await supabase.from("search_history").delete().eq('user_id', user_id).lt('created_at', thirtyDaysAgo.toISOString());
+            } catch (err) {
+                console.error("Erro ao salvar histórico/limpar banco:", err);
+            }
         }
 
-        // ✅ Incrementa ou cria o contador de pesquisas anônimas no servidor
+        // CORREÇÃO: Uso correto do await para garantir a gravação do limite anônimo
         if (!user_id && anon_fingerprint) {
             const { data: existing } = await supabase
                 .from('anon_search_limits')
@@ -235,16 +201,14 @@ export async function POST(req: Request) {
                 .single();
 
             if (existing) {
-                supabase
+                await supabase
                     .from('anon_search_limits')
                     .update({ search_count: existing.search_count + 1, last_search_at: new Date().toISOString() })
-                    .eq('fingerprint', anon_fingerprint)
-                    .then();
+                    .eq('fingerprint', anon_fingerprint);
             } else {
-                supabase
+                await supabase
                     .from('anon_search_limits')
-                    .insert([{ fingerprint: anon_fingerprint, search_count: 1 }])
-                    .then();
+                    .insert([{ fingerprint: anon_fingerprint, search_count: 1 }]);
             }
         }
 
@@ -253,13 +217,12 @@ export async function POST(req: Request) {
     } catch (error: any) {
         console.error("Erro interno na rota /api/pesquisa:", error);
 
-        // Registrar erro no painel do Supabase silenciosamente
-        supabase.from('system_errors').insert([{
+        // CORREÇÃO: Await na gravação de logs de erro
+        await supabase.from('system_errors').insert([{
             error_message: error.message || 'Erro desconhecido na API de Pesquisa',
             context: { origin: 'api_pesquisa', payload: requestContext }
-        }]).then();
+        }]);
 
         return NextResponse.json({ error: error.message || "Erro interno na API de Pesquisa." }, { status: 500 });
     }
 }
-

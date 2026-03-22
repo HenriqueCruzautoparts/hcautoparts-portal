@@ -53,7 +53,8 @@ export default function Home() {
       navigator.hardwareConcurrency?.toString() || '0',
       new Date().getTimezoneOffset().toString(),
     ];
-    // Canvas fingerprint (hash visual do GPU/driver de renderização)
+
+    // Tratamento mais robusto para bloqueadores de Canvas
     try {
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
@@ -61,15 +62,19 @@ export default function Home() {
         ctx.textBaseline = 'top';
         ctx.font = '14px Arial';
         ctx.fillText('AutoParts🔧', 2, 2);
-        components.push(canvas.toDataURL().slice(-50));
+        const dataUrl = canvas.toDataURL();
+        if (dataUrl && dataUrl.length > 50) {
+          components.push(dataUrl.slice(-50));
+        }
       }
-    } catch (e) {}
+    } catch (e) {
+      console.warn("Canvas bloqueado, usando fingerprint parcial.");
+    }
+
     const raw = components.join('|');
-    // Hash simples via Web Crypto API
     const buffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(raw));
     return Array.from(new Uint8Array(buffer)).map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 32);
   };
-
   useEffect(() => {
     const fetchProfile = async (userId: string) => {
       const { data } = await supabase.from('profiles').select('full_name').eq('id', userId).single();
@@ -251,37 +256,37 @@ export default function Home() {
       if (data.dados_tecnicos?.top_3_marcas && Array.isArray(data.dados_tecnicos.top_3_marcas)) {
         try {
           const AFFILIATE_PARAMS = 'matt_word=henrique_cruzn&matt_tool=81389334&forceInApp=true&ref=BFOG';
-          
+
           const mlCards = data.dados_tecnicos.top_3_marcas.map((marcaItem: any, index: number) => {
             if (!marcaItem.termo_busca_mercadolivre) return null;
-            
+
             // 1. Limpeza do Termo e Link Base
             const searchTermBase = marcaItem.termo_busca_mercadolivre.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
             // 2. Aplicação do filtro de "Menor Preço" do ML ("_OrderId_PRICE")
             const baseLink = `https://lista.mercadolivre.com.br/${searchTermBase}_OrderId_PRICE`;
             // 3. Injeção do Afiliado Seguro
             const finalLink = baseLink.includes('?') ? `${baseLink}&${AFFILIATE_PARAMS}` : `${baseLink}?${AFFILIATE_PARAMS}`;
-            
+
             return {
-               id: `ml-card-${index}-${Date.now()}`,
-               title: `${marcaItem.marca} — ${data.dados_tecnicos?.identificacao_tecnica?.peca || 'Peça Automotiva'}`,
-               price: null,
-               link: finalLink,
-               thumbnail: null,
-               brand: marcaItem.marca,
-               coupon: null,
-               codigo_peca: marcaItem.codigo_peca,
-               justificativa: marcaItem.justificativa,
-               parcelamento: null
+              id: `ml-card-${index}-${Date.now()}`,
+              title: `${marcaItem.marca} — ${data.dados_tecnicos?.identificacao_tecnica?.peca || 'Peça Automotiva'}`,
+              price: null,
+              link: finalLink,
+              thumbnail: null,
+              brand: marcaItem.marca,
+              coupon: null,
+              codigo_peca: marcaItem.codigo_peca,
+              justificativa: marcaItem.justificativa,
+              parcelamento: null
             };
           }).filter(Boolean);
-          
+
           setResult((prev: any) => {
-             if (!prev) return prev;
-             return { ...prev, ml_results: mlCards };
+            if (!prev) return prev;
+            return { ...prev, ml_results: mlCards };
           });
-        } catch(e) {
-           console.error("Erro renderizando cards estáveis", e);
+        } catch (e) {
+          console.error("Erro renderizando cards estáveis", e);
         }
       }
 
@@ -545,7 +550,7 @@ export default function Home() {
                       className="w-full bg-[#2C2C2E]/60 border border-white/10 rounded-2xl px-4 py-3 text-white focus:outline-none focus:border-[#FF2D55]/50 focus:bg-[#3A3A3C]/40 transition-colors appearance-none pr-10 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <option value="" className="bg-[#1C1C1E] text-[#8E8E93]">Selecione o Ano...</option>
-                      {guidedForm.montadora && guidedForm.modelo && Object.keys(vehicleData[guidedForm.montadora]?.[guidedForm.modelo] || {}).sort((a,b) => b.localeCompare(a)).map(year => (
+                      {guidedForm.montadora && guidedForm.modelo && Object.keys(vehicleData[guidedForm.montadora]?.[guidedForm.modelo] || {}).sort((a, b) => b.localeCompare(a)).map(year => (
                         <option key={year} value={year} className="bg-[#1C1C1E] text-white">{year}</option>
                       ))}
                     </select>
@@ -676,7 +681,7 @@ export default function Home() {
         {/* Results Container */}
         {result && !loading && (
           <div className="animate-in zoom-in-95 fade-in duration-500 max-w-4xl mx-auto group space-y-8 relative">
-            
+
             {/* Botão Nova Pesquisa e Ações */}
             <div className="flex items-center justify-between mb-2">
               <button
@@ -696,12 +701,12 @@ export default function Home() {
             {(result.dados_tecnicos?.top_3_marcas && result.dados_tecnicos.top_3_marcas.length > 0) && (
               <div className="rounded-[32px] bg-[#1C1C1E]/60 backdrop-blur-xl border border-white/10 p-5 md:p-6 shadow-[0_8px_30px_rgb(0,0,0,0.5)]">
                 <div className="flex flex-col md:flex-row gap-5 items-stretch">
-                  
+
                   {/* Códigos OEM da Peça (Prioridade Local) */}
                   {(() => {
                     const oem = result.dados_tecnicos?.identificacao_tecnica?.codigo_oem;
                     const hasOem = oem && !oem.includes('Requer') && !oem.includes('Consultar') && !oem.includes('Consulte') && oem.length > 3;
-                    
+
                     return (
                       <div className="flex-1 flex flex-col justify-between rounded-[20px] bg-black/40 border border-[#32ADE6]/20 p-4 sm:p-5">
                         <h3 className="text-[#32ADE6] font-bold text-[15px] mb-3 flex items-center gap-2">
@@ -722,16 +727,16 @@ export default function Home() {
 
                   {/* Mega Botão Centralizado para Compra Rápida Online */}
                   {(() => {
-                     // Utilizando a palavra-chave cravada da MELHOR MARCA recomendada pela IA
-                     const topMarca = result.dados_tecnicos?.top_3_marcas?.[0];
-                     const searchWord = topMarca?.termo_busca_mercadolivre 
-                         ? topMarca.termo_busca_mercadolivre 
-                         : `${result.dados_tecnicos?.identificacao_tecnica?.peca || ''}`;
-                         
-                     const optimizedTerm = searchWord.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
-                     const link = `https://lista.mercadolivre.com.br/${optimizedTerm}_OrderId_PRICE?matt_word=henrique_cruzn&matt_tool=81389334&forceInApp=true&ref=BFOG`;
-                     
-                     return (
+                    // Utilizando a palavra-chave cravada da MELHOR MARCA recomendada pela IA
+                    const topMarca = result.dados_tecnicos?.top_3_marcas?.[0];
+                    const searchWord = topMarca?.termo_busca_mercadolivre
+                      ? topMarca.termo_busca_mercadolivre
+                      : `${result.dados_tecnicos?.identificacao_tecnica?.peca || ''}`;
+
+                    const optimizedTerm = searchWord.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+                    const link = `https://lista.mercadolivre.com.br/${optimizedTerm}_OrderId_PRICE?matt_word=henrique_cruzn&matt_tool=81389334&forceInApp=true&ref=BFOG`;
+
+                    return (
                       <a
                         href={link}
                         target="_blank"
@@ -752,9 +757,9 @@ export default function Home() {
                           Pesquisar Menor Preço
                         </span>
                       </a>
-                     );
+                    );
                   })()}
-                  
+
                 </div>
               </div>
             )}
@@ -815,10 +820,10 @@ export default function Home() {
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         {result.dados_tecnicos.top_3_marcas.map((marcaItem: any, idx: number) => {
                           const isBest = idx === 0;
-                          
+
                           return (
                             <div key={`brand-${idx}`} className={`bg-[#2C2C2E]/60 border ${isBest ? 'border-[#FF2D55]/50 shadow-[0_4px_15px_rgba(255,45,85,0.15)] ring-1 ring-[#FF2D55]/20' : 'border-white/10'} rounded-2xl p-6 flex flex-col h-full relative overflow-hidden`}>
-                              
+
                               {/* Tag Melhor Opção */}
                               {isBest && (
                                 <div className="absolute top-0 right-0 bg-gradient-to-r from-[#FF2D55] to-[#FF3B30] text-white text-[10px] font-bold px-3 py-1 rounded-bl-lg uppercase tracking-wider">
@@ -827,12 +832,12 @@ export default function Home() {
                               )}
 
                               <h4 className={`text-xl font-bold mb-3 ${isBest ? 'text-[#FF2D55]' : 'text-white'}`}>{marcaItem.marca}</h4>
-                              
+
                               <div className="bg-black/30 rounded-xl p-3 mb-4 border border-white/5">
                                 <span className="text-[10px] text-[#8E8E93] font-bold uppercase tracking-widest block mb-1">Código da Peça</span>
                                 <span className="text-[#E5E5EA] font-mono text-[18px] font-black tracking-wider block">{marcaItem.codigo_peca}</span>
                               </div>
-                              
+
                               <p className="text-[14px] text-[#E5E5EA] flex-grow leading-relaxed mb-4">
                                 {marcaItem.justificativa}
                               </p>
@@ -915,12 +920,12 @@ export default function Home() {
           </div>
         )}
 
-        <CompleteProfileModal 
-          isOpen={showCompleteProfile} 
+        <CompleteProfileModal
+          isOpen={showCompleteProfile}
           onComplete={() => {
             setShowCompleteProfile(false);
             supabase.auth.refreshSession();
-          }} 
+          }}
         />
       </main>
 
