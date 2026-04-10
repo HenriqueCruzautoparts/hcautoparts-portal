@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Search, LayoutDashboard, Activity, CheckCircle2, ImagePlus, Camera, X, LogIn, LogOut, User, Headset, Zap, Settings2, ChevronDown, Package, Loader2 } from 'lucide-react';
+import { Search, LayoutDashboard, Activity, CheckCircle2, ImagePlus, Camera, X, LogIn, LogOut, User, Headset, Zap, Settings2, ChevronDown, Package, Loader2, Ticket, Tag, Copy } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { SearchHistory } from '@/components/SearchHistory';
@@ -13,6 +13,19 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { vehicleData } from '@/data/vehicles';
 
+// ---- UTILITÁRIO: Constrói link do Mercado Livre Brasil ----
+const ML_AFFILIATE = 'matt_word=henrique_cruzn&matt_tool=81389334&forceInApp=true&ref=BFOG';
+function buildMlLink(searchTerm: string): string {
+  if (!searchTerm || searchTerm.trim().length === 0) return '#';
+  const cleaned = searchTerm.trim().toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // Remove acentos: ô→o, á→a, ç→c
+    .replace(/\s+/g, '-')
+    .replace(/[^a-z0-9-]/g, '')
+    .replace(/-{2,}/g, '-') // Colapsa hifens duplicados
+    .replace(/^-|-$/g, ''); // Remove hifens nas pontas
+  return `https://lista.mercadolivre.com.br/${cleaned}?${ML_AFFILIATE}`;
+}
+
 export default function Home() {
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(false);
@@ -23,7 +36,7 @@ export default function Home() {
   const [user, setUser] = useState<any | null>(null);
   const [profile, setProfile] = useState<any | null>(null);
   const [anonFingerprint, setAnonFingerprint] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'smart' | 'guided'>('smart');
+  const [activeTab, setActiveTab] = useState<'smart' | 'guided' | 'coupons'>('smart');
   const [showCompleteProfile, setShowCompleteProfile] = useState(false);
   const [guidedForm, setGuidedForm] = useState({
     montadora: '',
@@ -251,27 +264,16 @@ export default function Home() {
 
       setResult(data);
 
-      // Nova Arquitetura Estável: Links de Afiliado Diretos (Sem chamadas à API do ML)
-      // O frontend apenas monta as URLs e exibe as informações levantadas pelo Gemini
+      // Monta links de afiliado usando termos gerados pelo SERVIDOR (não pela IA)
       if (data.dados_tecnicos?.top_3_marcas && Array.isArray(data.dados_tecnicos.top_3_marcas)) {
         try {
-          const AFFILIATE_PARAMS = 'matt_word=henrique_cruzn&matt_tool=81389334&forceInApp=true&ref=BFOG';
-
           const mlCards = data.dados_tecnicos.top_3_marcas.map((marcaItem: any, index: number) => {
-            if (!marcaItem.termo_busca_mercadolivre) return null;
-
-            // 1. Limpeza do Termo e Link Base
-            const searchTermBase = marcaItem.termo_busca_mercadolivre.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
-            // 2. Aplicação do filtro de "Menor Preço" do ML ("_OrderId_PRICE")
-            const baseLink = `https://lista.mercadolivre.com.br/${searchTermBase}_OrderId_PRICE`;
-            // 3. Injeção do Afiliado Seguro
-            const finalLink = baseLink.includes('?') ? `${baseLink}&${AFFILIATE_PARAMS}` : `${baseLink}?${AFFILIATE_PARAMS}`;
-
+            const termo = marcaItem.termo_busca_mercadolivre || '';
             return {
               id: `ml-card-${index}-${Date.now()}`,
               title: `${marcaItem.marca} — ${data.dados_tecnicos?.identificacao_tecnica?.peca || 'Peça Automotiva'}`,
               price: null,
-              link: finalLink,
+              link: buildMlLink(termo),
               thumbnail: null,
               brand: marcaItem.marca,
               coupon: null,
@@ -286,7 +288,7 @@ export default function Home() {
             return { ...prev, ml_results: mlCards };
           });
         } catch (e) {
-          console.error("Erro renderizando cards estáveis", e);
+          console.error("Erro renderizando cards ML", e);
         }
       }
 
@@ -322,14 +324,31 @@ export default function Home() {
     setError(null);
     try {
       const parsedResult = JSON.parse(historyResult);
-      // Verifica se é o formato novo (dados_tecnicos) ou intermediário (analise_tecnica)
       if (parsedResult?.dados_tecnicos || parsedResult?.analise_tecnica) {
+        // Reconstrói termos de busca ML para pesquisas do histórico (mesma lógica do servidor)
+        if (parsedResult?.dados_tecnicos?.top_3_marcas) {
+          const peca = parsedResult.dados_tecnicos.identificacao_tecnica?.peca || '';
+          const veiculoBase = parsedResult.dados_tecnicos.identificacao_tecnica?.veiculo_base || '';
+          const anoMatch = (veiculoBase + ' ' + historyQuery).match(/\b(19|20)\d{2}\b/);
+          const ano = anoMatch ? anoMatch[0] : '';
+          const modeloMatch = veiculoBase.match(/(?:VW|Volkswagen|Toyota|Ford|Chevrolet|Fiat|Honda|Hyundai|GM|Renault|Nissan|Jeep|RAM|GWM|BYD|Caoa Chery|Mitsubishi|Peugeot|Citroën|BMW|Mercedes|Audi|Kia)\s+(\S+)/i);
+          const modelo = modeloMatch ? modeloMatch[1] : '';
+          const geracaoMatch = veiculoBase.match(/\b(G[1-9]|GII|GIII|GIV|GV|GVI|MK\d+|E\d{3})\b/i);
+          const geracao = geracaoMatch ? geracaoMatch[0] : '';
+          const stopWords = ['de', 'do', 'da', 'dos', 'das', 'com', 'sem', 'para', 'e', 'ou', 'em', 'no', 'na', 'o', 'a', 'os', 'as'];
+          const pecaLimpa = peca.replace(/\(.*?\)/g, '').split(/\s+/).filter((w: string) => w.length > 1 && !stopWords.includes(w.toLowerCase())).slice(0, 3).join(' ').trim();
+
+          parsedResult.dados_tecnicos.top_3_marcas = parsedResult.dados_tecnicos.top_3_marcas.map((m: any) => {
+            const marcaLimpa = m.marca.replace(/\s*\(.*?\)\s*/g, '').trim().split(/\s+/).slice(0, 2).join(' ');
+            const termoBase = `${pecaLimpa} ${modelo} ${geracao} ${ano}`.replace(/\s+/g, ' ').trim();
+            return { ...m, termo_busca_mercadolivre: `${termoBase} ${marcaLimpa}`.trim() };
+          });
+        }
         setResult(parsedResult);
       } else {
         setResult({ analise_tecnica: historyResult, ml_results: [] });
       }
     } catch (e) {
-      // Compatibilidade com pesquisas antigas (só string)
       const formattedResult = (historyResult || "").replace(
         /\[RAW_URL:\s*(http[^\]]+)\]/g,
         '[Ver Oferta]($1)'
@@ -343,7 +362,13 @@ export default function Home() {
       <main className="relative z-10 container mx-auto px-4 sm:px-6 py-8 md:py-12 max-w-5xl">
 
         {/* Top Navbar */}
-        <div className="w-full flex justify-end items-center mb-6 h-12">
+        <div className="w-full flex justify-between sm:justify-end items-center mb-4 sm:mb-6 h-12">
+          {!user && (
+             <div className="flex items-center">
+                <Image src="/logo.png" alt="Logo" width={24} height={24} className="rounded sm:hidden" />
+                <span className="ml-2 text-sm font-bold text-white sm:hidden">AutoParts AI</span>
+             </div>
+          )}
           {user ? (
             <div className="flex items-center space-x-1 sm:space-x-3 bg-[#1C1C1E]/60 backdrop-blur-md border border-white/10 rounded-full pl-3 pr-1 py-1 sm:pl-4 sm:pr-1.5 sm:py-1.5 shadow-sm overflow-hidden max-w-full">
               <Link href="/perfil" className="flex items-center space-x-1.5 sm:space-x-2 text-[#E5E5EA] text-[13px] sm:text-[15px] font-medium hover:text-white transition-colors cursor-pointer mr-0 sm:mr-1 shrink">
@@ -393,24 +418,22 @@ export default function Home() {
         {user && <DashboardWelcomeModal />}
 
         {/* Header Section */}
-        <div className="flex flex-col items-center justify-center text-center mb-10 space-y-3">
-          <div className="inline-flex items-center justify-center p-2 mb-2 rounded-2xl bg-[#1C1C1E] border border-white/5 shadow-sm backdrop-blur-md">
-            <Image src="/logo.png" alt="AutoParts AI Logo" width={28} height={28} className="rounded-lg shadow-[0_0_10px_rgba(255,45,85,0.4)]" />
-            <span className="ml-2 text-lg font-semibold text-white tracking-tight">
+        <div className="flex flex-col items-center justify-center text-center mb-8 sm:mb-10 space-y-2 sm:space-y-3">
+          <div className="inline-flex items-center justify-center p-1.5 sm:p-2 mb-1 sm:mb-2 rounded-xl sm:rounded-2xl bg-[#1C1C1E] border border-white/5 shadow-sm backdrop-blur-md">
+            <Image src="/logo.png" alt="AutoParts AI Logo" width={24} height={24} className="rounded-lg shadow-[0_0_10px_rgba(255,45,85,0.4)] sm:w-[28px] sm:h-[28px]" />
+            <span className="ml-2 text-base sm:text-lg font-semibold text-white tracking-tight">
               AutoParts AI
             </span>
-            <span className="ml-2 text-[10px] font-bold text-[#FF2D55] bg-[#FF2D55]/10 border border-[#FF2D55]/30 px-2 py-0.5 rounded-full uppercase tracking-wider">
-              Beta 1.1
+            <span className="ml-2 text-[9px] sm:text-[10px] font-bold text-[#FF2D55] bg-[#FF2D55]/10 border border-[#FF2D55]/30 px-1.5 sm:py-0.5 rounded-full uppercase tracking-wider">
+              1.1
             </span>
           </div>
-          <h1 className="text-4xl md:text-5xl font-bold tracking-tight text-white pb-1">
-            Pesquisa Inteligente <br className="hidden md:block" />
-            <span className="text-[#FF2D55]">
-              de Autopeças
-            </span>
+          <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold tracking-tight text-white pb-1 px-2">
+            Busca de Alta <span className="text-[#FF2D55]">Precisão</span> <br className="hidden sm:block" />
+            de Autopeças
           </h1>
-          <p className="text-base md:text-lg text-[#8E8E93] max-w-xl mt-3 font-normal">
-            Encontre a peça específica para o seu veículo e pague mais barato.
+          <p className="text-sm sm:text-base md:text-lg text-[#8E8E93] max-w-xl mt-2 sm:mt-3 font-normal px-4">
+            Encontre a peça exata pelo código OEM ou aplicação técnica.
           </p>
         </div>
 
@@ -418,27 +441,34 @@ export default function Home() {
         <div className="max-w-3xl mx-auto w-full mb-12 relative flex flex-col items-center">
 
           {/* Tabs */}
-          <div className="flex bg-[#1C1C1E]/60 backdrop-blur-md p-1.5 rounded-full border border-white/10 w-fit mb-8 shadow-sm">
+          <div className="flex bg-[#1C1C1E]/60 backdrop-blur-md p-1 sm:p-1.5 rounded-2xl sm:rounded-full border border-white/10 w-full sm:w-fit mb-6 sm:mb-8 shadow-sm overflow-x-auto no-scrollbar">
             <button
               onClick={() => setActiveTab('smart')}
-              className={`flex items-center px-6 py-2.5 rounded-full text-[15px] font-medium transition-all duration-300 ${activeTab === 'smart' ? 'bg-[#2C2C2E] text-white shadow-sm border border-white/5' : 'text-[#8E8E93] hover:text-white'}`}
+              className={`flex items-center justify-center flex-1 sm:flex-none px-4 sm:px-6 py-2 sm:py-2.5 rounded-xl sm:rounded-full text-[13px] sm:text-[15px] font-medium transition-all duration-300 whitespace-nowrap ${activeTab === 'smart' ? 'bg-[#2C2C2E] text-white shadow-sm border border-white/5' : 'text-[#8E8E93] hover:text-white'}`}
             >
-              <Zap className="w-4 h-4 mr-2" />
-              Busca com IA
+              <Zap className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
+              IA
             </button>
             <button
               onClick={() => setActiveTab('guided')}
-              className={`flex items-center px-6 py-2.5 rounded-full text-[15px] font-medium transition-all duration-300 ${activeTab === 'guided' ? 'bg-[#FF2D55]/10 text-[#FF2D55] shadow-sm border border-[#FF2D55]/20' : 'text-[#8E8E93] hover:text-[#FF2D55]'}`}
+              className={`flex items-center justify-center flex-1 sm:flex-none px-4 sm:px-6 py-2 sm:py-2.5 rounded-xl sm:rounded-full text-[13px] sm:text-[15px] font-medium transition-all duration-300 whitespace-nowrap ${activeTab === 'guided' ? 'bg-[#FF2D55]/10 text-[#FF2D55] shadow-sm border border-[#FF2D55]/20' : 'text-[#8E8E93] hover:text-[#FF2D55]'}`}
             >
-              <Settings2 className="w-4 h-4 mr-2" />
-              Busca Guiada
+              <Settings2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
+              Guiada
+            </button>
+            <button
+              onClick={() => setActiveTab('coupons')}
+              className={`flex items-center justify-center flex-1 sm:flex-none px-4 sm:px-6 py-2 sm:py-2.5 rounded-xl sm:rounded-full text-[13px] sm:text-[15px] font-medium transition-all duration-300 whitespace-nowrap ${activeTab === 'coupons' ? 'bg-[#32ADE6]/10 text-[#32ADE6] shadow-sm border border-[#32ADE6]/20' : 'text-[#8E8E93] hover:text-[#32ADE6]'}`}
+            >
+              <Ticket className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
+              Cupons
             </button>
           </div>
 
           {activeTab === 'smart' ? (
             <form
               onSubmit={handleSearch}
-              className="relative flex flex-col bg-[#1C1C1E]/70 backdrop-blur-2xl border border-white/10 rounded-[32px] p-2 shadow-[0_8px_30px_rgb(255,45,85,0.05)] focus-within:ring-2 focus-within:ring-[#FF2D55]/50 transition-all duration-300 w-full"
+              className="relative flex flex-col bg-[#1C1C1E]/70 backdrop-blur-2xl border border-white/10 rounded-2xl sm:rounded-[32px] p-2 shadow-[0_8px_30px_rgb(255,45,85,0.05)] focus-within:ring-2 focus-within:ring-[#FF2D55]/50 transition-all duration-300 w-full"
             >
               {imagePreview && (
                 <div className="relative self-start ml-4 mt-2 mb-2">
@@ -454,37 +484,38 @@ export default function Home() {
               )}
 
               <div className="flex items-center w-full">
-                <div className="pl-6 pr-2">
-                  <Search className="w-5 h-5 text-[#8E8E93]" />
+                <div className="pl-3 sm:pl-6 pr-1 sm:pr-2">
+                  <Search className="w-4 h-4 sm:w-5 sm:h-5 text-[#8E8E93]" />
                 </div>
+                <div className="flex items-center">
+                  <label className="cursor-pointer p-1.5 sm:p-2 rounded-full hover:bg-white/5 transition-colors group relative" title="Upload Galeria">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handleImageUpload}
+                      disabled={loading}
+                    />
+                    <ImagePlus className="w-4 h-4 sm:w-5 sm:h-5 text-[#8E8E93] group-hover:text-[#FF2D55] transition-colors" />
+                  </label>
 
-                <label className="cursor-pointer p-2 rounded-full hover:bg-white/5 transition-colors group relative" title="Upload Galeria">
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={handleImageUpload}
-                    disabled={loading}
-                  />
-                  <ImagePlus className="w-5 h-5 text-[#8E8E93] group-hover:text-[#FF2D55] transition-colors" />
-                </label>
-
-                <label className="cursor-pointer p-2 rounded-full hover:bg-white/5 transition-colors group relative" title="Tirar Foto">
-                  <input
-                    type="file"
-                    accept="image/*"
-                    capture="environment"
-                    className="hidden"
-                    onChange={handleImageUpload}
-                    disabled={loading}
-                  />
-                  <Camera className="w-5 h-5 text-[#8E8E93] group-hover:text-[#FF2D55] transition-colors" />
-                </label>
+                  <label className="cursor-pointer p-1.5 sm:p-2 rounded-full hover:bg-white/5 transition-colors group relative" title="Tirar Foto">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      className="hidden"
+                      onChange={handleImageUpload}
+                      disabled={loading}
+                    />
+                    <Camera className="w-4 h-4 sm:w-5 sm:h-5 text-[#8E8E93] group-hover:text-[#FF2D55] transition-colors" />
+                  </label>
+                </div>
 
                 <input
                   type="text"
-                  className="flex-1 bg-transparent border-none outline-none text-white px-2 py-3 text-[17px] placeholder:text-[#8E8E93]"
-                  placeholder="Nome ou código da peça, ou chassi do veículo..."
+                  className="flex-1 bg-transparent border-none outline-none text-white px-2 py-2 sm:py-3 text-sm sm:text-[17px] placeholder:text-[#8E8E93] min-w-0"
+                  placeholder="Nome, código ou chassi..."
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   disabled={loading}
@@ -492,17 +523,18 @@ export default function Home() {
                 <button
                   type="submit"
                   disabled={loading || (!query.trim() && !imageBase64)}
-                  className="bg-gradient-to-r from-[#FF2D55] to-[#FF3B30] hover:from-[#FF3B30] hover:to-[#FF2D55] text-white rounded-full px-6 py-3 font-semibold text-[15px] transition-all duration-300 transform active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center ml-2 shadow-[0_4px_14px_0_rgba(255,45,85,0.39)] group relative overflow-hidden"
+                  className="bg-gradient-to-r from-[#FF2D55] to-[#FF3B30] hover:from-[#FF3B30] hover:to-[#FF2D55] text-white rounded-xl sm:rounded-full px-4 sm:px-6 py-2 sm:py-3 font-semibold text-[13px] sm:text-[15px] transition-all duration-300 transform active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center ml-1 sm:ml-2 shadow-[0_4px_14px_0_rgba(255,45,85,0.39)] group relative overflow-hidden"
                 >
-                  <span>{loading ? 'Buscando...' : 'Buscar'}</span>
+                  <span className="hidden sm:inline">{loading ? 'Buscando...' : 'Buscar'}</span>
+                  <span className="sm:hidden"><Search className="w-4 h-4" /></span>
                   {!loading && (
                     <div className="absolute inset-0 h-full w-full opacity-0 group-hover:opacity-20 bg-gradient-to-r from-transparent via-white to-transparent -translate-x-full group-hover:animate-shimmer" />
                   )}
                 </button>
               </div>
             </form>
-          ) : (
-            <form onSubmit={handleSearch} className="w-full bg-[#1C1C1E]/70 backdrop-blur-2xl border border-white/10 rounded-[32px] p-6 shadow-[0_8px_30px_rgb(255,45,85,0.05)] transition-all duration-300">
+          ) : activeTab === 'guided' ? (
+            <form onSubmit={handleSearch} className="w-full bg-[#1C1C1E]/70 backdrop-blur-2xl border border-white/10 rounded-2xl sm:rounded-[32px] p-4 sm:p-6 shadow-[0_8px_30px_rgb(255,45,85,0.05)] transition-all duration-300">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
                 <div className="space-y-1.5 relative">
                   <label className="text-[13px] font-medium text-[#8E8E93] ml-1">Montadora</label>
@@ -600,11 +632,73 @@ export default function Home() {
                 )}
               </button>
             </form>
-          )}
+          ) : activeTab === 'coupons' ? (
+            <div className="w-full bg-[#1C1C1E]/70 backdrop-blur-2xl border border-white/10 rounded-[32px] p-6 shadow-[0_8px_30px_rgb(50,173,230,0.05)] transition-all duration-300 animate-in fade-in zoom-in-95">
+              <div className="text-center mb-6">
+                <h2 className="text-2xl font-bold text-white flex items-center justify-center gap-2 mb-2">
+                  <Ticket className="w-6 h-6 text-[#32ADE6]" />
+                  Cupons Disponíveis
+                </h2>
+                <p className="text-[#8E8E93] text-sm max-w-md mx-auto">
+                  Economize ainda mais em suas compras utilizando nossos cupons selecionados para autopeças no Mercado Livre e parceiros.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {[
+                  { title: "Mercado Livre - Auto", desc: "10% OFF em Autopeças Acima de R$200", code: "AUTO10", link: buildMlLink("acessorios para veiculos") },
+                  { title: "Freios e Suspensão", desc: "Frete Grátis + 5% Extra em Pastilhas", code: "FREIOS5", link: buildMlLink("pastilha de freio") },
+                  { title: "Óleo e Filtros", desc: "Kits de Revisão com 15% OFF (Via App)", code: "REVISAO15", link: buildMlLink("kit revisao oleo") },
+                  { title: "Acessórios Internos", desc: "R$30 de Desconto na primeira compra", code: "BEMVINDO30", link: buildMlLink("acessorios carros") },
+                ].map((coupon, i) => (
+                  <div key={i} className="flex flex-col bg-[#2C2C2E]/60 border border-dashed border-[#32ADE6]/40 rounded-2xl p-5 hover:border-[#32ADE6] transition-colors group relative overflow-hidden">
+                    <div className="absolute top-0 right-0 bg-[#32ADE6]/10 text-[#32ADE6] text-[10px] font-bold px-2.5 py-1 rounded-bl-xl uppercase tracking-widest border-b border-l border-[#32ADE6]/20">
+                      Verificado
+                    </div>
+                    <div className="flex items-center gap-3 mb-2">
+                      <div className="w-10 h-10 rounded-full bg-[#32ADE6]/10 flex items-center justify-center shrink-0">
+                        <Tag className="w-5 h-5 text-[#32ADE6]" />
+                      </div>
+                      <div>
+                        <h3 className="text-white font-bold text-[15px]">{coupon.title}</h3>
+                        <p className="text-[#8E8E93] text-[12px] mt-0.5">{coupon.desc}</p>
+                      </div>
+                    </div>
+                    
+                    <div className="mt-auto pt-4 flex items-center gap-2">
+                      <div className="flex-1 bg-black/40 border border-white/10 rounded-xl px-3 py-2 flex items-center justify-between group-hover:border-[#32ADE6]/30 transition-colors">
+                        <span className="font-mono text-[#32ADE6] font-bold tracking-wider text-[14px]">{coupon.code}</span>
+                        <button 
+                          className="text-[#8E8E93] hover:text-white transition-colors" 
+                          title="Copiar cupom"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            navigator.clipboard.writeText(coupon.code);
+                            // Pode-se adicionar um toast aqui depois
+                          }}
+                        >
+                          <Copy className="w-4 h-4" />
+                        </button>
+                      </div>
+                      <a 
+                        href={coupon.link} 
+                        target="_blank" 
+                        rel="noreferrer"
+                        className="bg-[#32ADE6] hover:bg-[#2892C6] text-white p-2.5 rounded-xl transition-colors shrink-0"
+                        title="Usar cupom"
+                      >
+                        <Zap className="w-4 h-4" />
+                      </a>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
         </div>
 
         {/* Search History */}
-        {!result && !loading && (
+        {!result && !loading && activeTab !== 'coupons' && (
           <SearchHistory userId={user?.id ?? null} onSelect={handleHistorySelect} />
         )}
 
@@ -697,64 +791,67 @@ export default function Home() {
               </button>
             </div>
 
-            {/* Opção Rápida de Compra Local e ML */}
+            {/* Opção Rápida de Compra — Código OEM + Botão ML */}
             {(result.dados_tecnicos?.top_3_marcas && result.dados_tecnicos.top_3_marcas.length > 0) && (
-              <div className="rounded-[32px] bg-[#1C1C1E]/60 backdrop-blur-xl border border-white/10 p-5 md:p-6 shadow-[0_8px_30px_rgb(0,0,0,0.5)]">
-                <div className="flex flex-col md:flex-row gap-5 items-stretch">
+              <div className="rounded-2xl sm:rounded-[32px] bg-[#1C1C1E]/60 backdrop-blur-xl border border-white/10 p-4 sm:p-6 shadow-[0_8px_30px_rgb(0,0,0,0.5)]">
+                <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 items-stretch">
 
-                  {/* Códigos OEM da Peça (Prioridade Local) */}
+                  {/* Código OEM */}
                   {(() => {
                     const oem = result.dados_tecnicos?.identificacao_tecnica?.codigo_oem;
                     const hasOem = oem && !oem.includes('Requer') && !oem.includes('Consultar') && !oem.includes('Consulte') && oem.length > 3;
-
                     return (
-                      <div className="flex-1 flex flex-col justify-between rounded-[20px] bg-black/40 border border-[#32ADE6]/20 p-4 sm:p-5">
-                        <h3 className="text-[#32ADE6] font-bold text-[15px] mb-3 flex items-center gap-2">
+                      <div className="flex-1 flex flex-col justify-between rounded-[20px] bg-black/40 border border-[#32ADE6]/20 p-4">
+                        <h3 className="text-[#32ADE6] font-bold text-[13px] sm:text-[15px] mb-2 flex items-center gap-2">
                           <span>🏷️</span> Código da Peça Original
                         </h3>
-                        <div className="flex flex-col gap-2">
-                          <p className="text-[#8E8E93] text-[12px] mb-1">Use este código na autopeças ou concessionária local:</p>
-                          {hasOem && (
-                            <div className="flex flex-col bg-[#32ADE6]/10 border border-[#32ADE6]/30 rounded-lg px-3 py-2 mb-1">
+                        <p className="text-[#8E8E93] text-[11px] mb-2">Use este código na autopeças ou concessionária local:</p>
+                        {hasOem ? (
+                          <>
+                            <div className="flex flex-col bg-[#32ADE6]/10 border border-[#32ADE6]/30 rounded-lg px-3 py-2 mb-3">
                               <span className="text-[10px] text-[#32ADE6]/90 font-bold uppercase tracking-wider mb-0.5">Montadora (OEM)</span>
-                              <span className="text-white font-mono text-[16px] font-bold tracking-wider">{oem}</span>
+                              <span className="text-white font-mono text-[15px] sm:text-[17px] font-bold tracking-wider break-all">{oem}</span>
                             </div>
-                          )}
-                        </div>
+                            <a
+                              href={buildMlLink(oem)}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="w-full mt-auto py-2 bg-[#32ADE6]/10 hover:bg-[#32ADE6]/20 border border-[#32ADE6]/20 hover:border-[#32ADE6]/40 rounded-xl text-white text-[12px] font-bold transition-all text-center flex items-center justify-center gap-1.5"
+                            >
+                              <span>🎯</span> Buscar OEM Exato no ML
+                            </a>
+                          </>
+                        ) : (
+                          <p className="text-[#8E8E93] text-[12px] italic">Especifique o veículo para obter o código OEM exato.</p>
+                        )}
                       </div>
                     );
                   })()}
 
-                  {/* Mega Botão Centralizado para Compra Rápida Online */}
+                  {/* Botão ML */}
                   {(() => {
-                    // Utilizando a palavra-chave cravada da MELHOR MARCA recomendada pela IA
                     const topMarca = result.dados_tecnicos?.top_3_marcas?.[0];
-                    const searchWord = topMarca?.termo_busca_mercadolivre
-                      ? topMarca.termo_busca_mercadolivre
-                      : `${result.dados_tecnicos?.identificacao_tecnica?.peca || ''}`;
-
-                    const optimizedTerm = searchWord.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
-                    const link = `https://lista.mercadolivre.com.br/${optimizedTerm}_OrderId_PRICE?matt_word=henrique_cruzn&matt_tool=81389334&forceInApp=true&ref=BFOG`;
-
+                    const searchWord = topMarca?.termo_busca_mercadolivre || '';
+                    const link = buildMlLink(searchWord);
                     return (
                       <a
                         href={link}
                         target="_blank"
                         rel="noreferrer"
-                        className="flex-1 flex flex-col items-center justify-center p-5 rounded-[20px] bg-gradient-to-r from-[#FF2D55] to-[#ff0036] text-white transition-all duration-300 shadow-[0_4px_20px_rgba(255,45,85,0.4)] hover:shadow-[0_8px_30px_rgba(255,45,85,0.6)] hover:scale-[1.02] group cursor-pointer"
+                        className="flex-1 flex flex-col items-center justify-center p-4 sm:p-5 rounded-[20px] bg-gradient-to-r from-[#FF2D55] to-[#ff0036] text-white transition-all duration-300 shadow-[0_4px_20px_rgba(255,45,85,0.4)] hover:shadow-[0_8px_30px_rgba(255,45,85,0.6)] hover:scale-[1.02] cursor-pointer"
                       >
-                        <span className="font-extrabold text-[18px] sm:text-[22px] flex items-center justify-center text-center gap-2 drop-shadow-md mb-2">
+                        <span className="font-extrabold text-[16px] sm:text-[20px] flex items-center justify-center text-center gap-2 mb-1">
                           <span>📦</span>
                           <span>Comprar no Mercado Livre</span>
                         </span>
                         {topMarca && (
-                          <span className="text-[12px] sm:text-[13px] font-medium opacity-95 text-center px-4 mb-3">
+                          <span className="text-[11px] sm:text-[13px] font-medium opacity-90 text-center mb-2">
                             Melhor Qualidade: <strong>{topMarca.marca}</strong>
                           </span>
                         )}
-                        <span className="text-[11px] uppercase tracking-[0.15em] font-semibold flex items-center gap-2 mt-auto bg-black/20 py-1.5 px-3 rounded-full border border-black/10">
-                          <span className="w-2 h-2 rounded-full bg-[#FFCC00] animate-pulse"></span>
-                          Pesquisar Menor Preço
+                        <span className="text-[10px] uppercase tracking-[0.12em] font-semibold flex items-center gap-1.5 bg-black/20 py-1 px-2.5 rounded-full border border-black/10">
+                          <span className="w-1.5 h-1.5 rounded-full bg-[#32ADE6] animate-pulse"></span>
+                          Ver Resultado Exato
                         </span>
                       </a>
                     );
@@ -764,19 +861,17 @@ export default function Home() {
               </div>
             )}
 
-
-
             {/* Analysis Container */}
-            <div className="rounded-[32px] bg-[#1C1C1E]/60 backdrop-blur-xl border border-white/10 shadow-[0_8px_30px_rgb(0,0,0,0.5)] p-6 md:p-10">
-              <div className="flex items-center space-x-3 mb-6 pb-6 border-b border-white/10">
-                <div className="w-12 h-12 rounded-2xl bg-[#FF2D55]/10 border border-[#FF2D55]/20 flex items-center justify-center">
-                  <CheckCircle2 className="w-6 h-6 text-[#FF2D55]" />
+            <div className="rounded-2xl sm:rounded-[32px] bg-[#1C1C1E]/60 backdrop-blur-xl border border-white/10 shadow-[0_8px_30px_rgb(0,0,0,0.5)] p-4 sm:p-6 md:p-10">
+              <div className="flex items-center space-x-2 sm:space-x-3 mb-4 sm:mb-6 pb-4 sm:pb-6 border-b border-white/10">
+                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-[#FF2D55]/10 border border-[#FF2D55]/20 flex items-center justify-center shrink-0">
+                  <CheckCircle2 className="w-5 h-5 sm:w-6 sm:h-6 text-[#FF2D55]" />
                 </div>
                 <div>
-                  <h2 className="text-[22px] font-bold text-white tracking-tight">
+                  <h2 className="text-lg sm:text-[22px] font-bold text-white tracking-tight">
                     Análise Técnica da Peça
                   </h2>
-                  <p className="text-[#8E8E93] text-sm mt-0.5">{result.query}</p>
+                  <p className="text-[#8E8E93] text-[12px] sm:text-sm mt-0.5">{result.query}</p>
                 </div>
               </div>
 
@@ -785,14 +880,14 @@ export default function Home() {
 
                   {/* Identificação Técnica */}
                   <div>
-                    <h3 className="text-xl font-bold text-white mb-4 border-b border-white/10 pb-2">🛠️ Identificação Técnica</h3>
+                    <h3 className="text-lg sm:text-xl font-bold text-white mb-3 sm:mb-4 border-b border-white/10 pb-2">🛠️ Identificação Técnica</h3>
                     {result.dados_tecnicos.identificacao_tecnica.breve_explicativo && (
-                      <div className="mb-4 p-4 rounded-xl bg-[#2C2C2E]/40 border border-[#FF2D55]/10 text-[#E5E5EA] text-[15px] leading-relaxed italic relative overflow-hidden">
+                      <div className="mb-4 p-3 sm:p-4 rounded-xl bg-[#2C2C2E]/40 border border-[#FF2D55]/10 text-[#E5E5EA] text-sm sm:text-[15px] leading-relaxed italic relative overflow-hidden">
                         <div className="absolute left-0 top-0 bottom-0 w-1 bg-[#FF2D55]/50"></div>
                         {result.dados_tecnicos.identificacao_tecnica.breve_explicativo}
                       </div>
                     )}
-                    <ul className="space-y-2">
+                    <ul className="space-y-2 text-sm sm:text-base">
                       <li><strong className="text-white">Peça:</strong> {result.dados_tecnicos.identificacao_tecnica.peca}</li>
                       <li><strong className="text-white">Código OEM:</strong> {result.dados_tecnicos.identificacao_tecnica.codigo_oem}</li>
                       <li><strong className="text-white">Nome em Inglês:</strong> {result.dados_tecnicos.identificacao_tecnica.nome_ingles}</li>
@@ -811,45 +906,45 @@ export default function Home() {
                     </ul>
                   </div>
 
-                  {/* Top 3 Marcas (Apenas Informações Técnicas) */}
+                  {/* Top 3 Marcas */}
                   {result.dados_tecnicos.top_3_marcas && result.dados_tecnicos.top_3_marcas.length > 0 && (
-                    <div className="mt-8">
-                      <h3 className="text-xl font-bold text-white mb-4 border-b border-white/10 pb-2 flex items-center justify-between">
-                        <span>⭐ Top 3 Melhores Marcas (Recomendação IA)</span>
+                    <div className="mt-6 sm:mt-8">
+                      <h3 className="text-lg sm:text-xl font-bold text-white mb-3 sm:mb-4 border-b border-white/10 pb-2">
+                        ⭐ Top 3 Melhores Marcas (Recomendação IA)
                       </h3>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
                         {result.dados_tecnicos.top_3_marcas.map((marcaItem: any, idx: number) => {
                           const isBest = idx === 0;
+                          const termo = (marcaItem.termo_busca_mercadolivre || '').trim();
+                          const mlLink = buildMlLink(termo);
 
                           return (
-                            <div key={`brand-${idx}`} className={`bg-[#2C2C2E]/60 border ${isBest ? 'border-[#FF2D55]/50 shadow-[0_4px_15px_rgba(255,45,85,0.15)] ring-1 ring-[#FF2D55]/20' : 'border-white/10'} rounded-2xl p-6 flex flex-col h-full relative overflow-hidden`}>
+                            <div key={`brand-${idx}`} className={`bg-[#2C2C2E]/60 border ${isBest ? 'border-[#FF2D55]/50 shadow-[0_4px_15px_rgba(255,45,85,0.15)] ring-1 ring-[#FF2D55]/20' : 'border-white/10'} rounded-xl sm:rounded-2xl p-4 sm:p-5 flex flex-col relative overflow-hidden`}>
 
-                              {/* Tag Melhor Opção */}
                               {isBest && (
-                                <div className="absolute top-0 right-0 bg-gradient-to-r from-[#FF2D55] to-[#FF3B30] text-white text-[10px] font-bold px-3 py-1 rounded-bl-lg uppercase tracking-wider">
+                                <div className="absolute top-0 right-0 bg-gradient-to-r from-[#FF2D55] to-[#FF3B30] text-white text-[9px] font-bold px-2.5 py-1 rounded-bl-lg uppercase tracking-wider">
                                   1ª Opção
                                 </div>
                               )}
 
-                              <h4 className={`text-xl font-bold mb-3 ${isBest ? 'text-[#FF2D55]' : 'text-white'}`}>{marcaItem.marca}</h4>
+                              <h4 className={`text-base sm:text-lg font-bold mb-2 ${isBest ? 'text-[#FF2D55]' : 'text-white'}`}>{marcaItem.marca}</h4>
 
-                              <div className="bg-black/30 rounded-xl p-3 mb-4 border border-white/5">
-                                <span className="text-[10px] text-[#8E8E93] font-bold uppercase tracking-widest block mb-1">Código da Peça</span>
-                                <span className="text-[#E5E5EA] font-mono text-[18px] font-black tracking-wider block">{marcaItem.codigo_peca}</span>
+                              <div className="bg-black/30 rounded-xl p-2 sm:p-2.5 mb-3 border border-white/5">
+                                <span className="text-[9px] sm:text-[10px] text-[#8E8E93] font-bold uppercase tracking-widest block mb-0.5">Código da Peça</span>
+                                <span className="text-[#E5E5EA] font-mono text-[12px] sm:text-[15px] font-black tracking-wide break-all block">{marcaItem.codigo_peca}</span>
                               </div>
 
-                              <p className="text-[14px] text-[#E5E5EA] flex-grow leading-relaxed mb-4">
+                              <p className="text-[12px] sm:text-[13px] text-[#E5E5EA] flex-grow leading-relaxed mb-3">
                                 {marcaItem.justificativa}
                               </p>
 
-                              {/* Botão de Compra Individual */}
                               <a
-                                href={`https://lista.mercadolivre.com.br/${marcaItem.termo_busca_mercadolivre?.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')}_OrderId_PRICE?matt_word=henrique_cruzn&matt_tool=81389334&forceInApp=true&ref=BFOG`}
+                                href={mlLink}
                                 target="_blank"
                                 rel="noreferrer"
-                                className="w-full mt-auto py-2.5 bg-white/5 hover:bg-[#FF2D55]/20 border border-white/10 hover:border-[#FF2D55]/30 rounded-xl text-white text-[13px] font-bold transition-all text-center flex items-center justify-center gap-2"
+                                className="w-full mt-auto py-2 sm:py-2.5 bg-white/5 hover:bg-[#FF2D55]/20 border border-white/10 hover:border-[#FF2D55]/30 rounded-xl text-white text-[12px] sm:text-[13px] font-bold transition-all text-center flex items-center justify-center gap-1.5"
                               >
-                                <span>🛒</span> Ver no Mercado Livre
+                                <span>🛒</span> Mercado Livre
                               </a>
                             </div>
                           );

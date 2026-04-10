@@ -26,76 +26,68 @@ interface GeminiResponse {
     };
 }
 
+// Detecta se a query parece um código de peça (alfanumérico, sem espaços ou com hifens)
+function isPartCode(query: string): boolean {
+    if (!query) return false;
+    const trimmed = query.trim();
+    // Padrões comuns de códigos OEM: ex 04E115561B, 33100-KWW-J00, 1J0615301B, W01-358-8041
+    return /^[A-Z0-9]{3,}[-]?[A-Z0-9]+$/i.test(trimmed.replace(/\s/g, ''));
+}
+
 async function getGeminiAnalysis(query: string, image?: string): Promise<GeminiResponse> {
-    const apiKey = process.env.GEMINI_API_KEY;
+    const apiKey = (process.env.GEMINI_API_KEY || "").trim();
 
     if (!apiKey) {
+        console.error("ERRO: GEMINI_API_KEY não encontrada no process.env");
         throw new Error("Erro de Configuração. A chave de API (GEMINI_API_KEY) não foi encontrada no servidor.");
     }
 
     const MODEL_NAME = "gemini-2.5-flash";
     const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${apiKey}`;
 
+    const buscaPorCodigo = isPartCode(query);
+
     const promptMestre = `
-    PERSONA: Você é um Especialista Sênior em Catálogos de Peças Automotivas com acesso a bancos de dados oficiais de todas as montadoras.
-    
-    MISSÃO: Analisar a pesquisa: "${query || "Imagem da peça."}" e recomendar as 3 MELHORES MARCAS de peças aftermarket.
+    Você é um cataloguista técnico automotivo. Sua única tarefa é identificar a peça exata e retornar dados técnicos em JSON.
 
-    REGRA 1 — ANTI-ALUCINAÇÃO GERAL:
-    Se a pesquisa for GENÉRICA (sem modelo exato, ano e motorização):
-    - NÃO INVENTE códigos OEM ou da marca. Use "Requer modelo exato" ou "Consultar Catálogo".
-    - Adicione AVISO no "breve_explicativo": "ATENÇÃO: Busca genérica. Especifique modelo, ano e motor para código exato."
-    - Use termos AMPLOS nos links do Mercado Livre (sem marca específica).
+    PESQUISA DO USUÁRIO: "${query || "Imagem da peça."}"
 
-    REGRA 2 — CÓDIGOS DE PEÇA (OBRIGATÓRIO):
-    - É SEU DEVER OBRIGATÓRIO fornecer o Código OEM genuíno e o Código da Marca Aftermarket correspondente. 
-    - O painel é usado por mecânicos que precisam do CÓDIGO EXATO para compra. 
-    - EVITE ao máximo "Consulte o catálogo". Pesquise em sua base interna até encontrar o código de referência cruzada correto para cada uma das 3 marcas.
+    ${buscaPorCodigo ? `ATENÇÃO: "${query}" é um CÓDIGO DE PEÇA. Identifique fabricante e tipo pela numeração. O campo codigo_oem deve ser "${query}".` : ''}
 
-    REGRA 3 — TERMOS DE BUSCA NO MERCADO LIVRE:
-    - O campo "termo_busca_mercadolivre" será usado diretamente na API de busca do ML.
-    - DEVE SER EXTREMAMENTE ENXUTO. Máximo de 4 palavras-chave. Nada de hifens.
-    - Foque APENAS: Peça Principal + Modelo Principal + Marca Aftermarket
-    - NUNCA inclua palavras genéricas como "para", "de", "do", "original", "genuíno", etc.
-    
-    Exemplos CORRETOS:
-    - "pastilha freio golf textar"
-    - "bomba combustivel audi continental"
-    - "filtro oleo corsa mann"
+    INSTRUÇÕES:
+    1. Identifique a peça, o veículo (com ANO e GERAÇÃO obrigatórios) e o código OEM.
+    2. Recomende 3 marcas aftermarket com seus códigos de referência cruzada.
+    3. Preencha o JSON abaixo. NÃO adicione texto fora do JSON.
 
-    REGRA 4 — INTERCAMBIABILIDADE:
-    - Liste APENAS veículos com CONFIRMAÇÃO de compatibilidade cruzada (plug and play).
-    - NÃO liste veículos "possivelmente compatíveis".
+    REGRAS CRÍTICAS:
+    - Se a pesquisa menciona um ano (ex: "2011"), a geração do veículo DEVE ser identificada (ex: VW Saveiro 2011 = G5).
+    - Se a pesquisa menciona uma versão (Cross, GTI, etc.), a peça deve ser específica dessa versão.
+    - Forneça códigos reais. Se não souber com certeza, use "Consultar fornecedor".
+    - Na montagem do 'termo_busca_mercadolivre', crie a String IDEAL para achar essa peça exata. Use a inteligência para agregar O MÁXIMO DE INFORMAÇÕES VITAIS, preferencialmente unindo: Peça + Veículo + Motor + Ano + Marca Oferecida (ou o Código de Fabricante se ele for comum para buscas). Forme uma string que um comprador experiente digitaria para achar essa peça exata e que traga todos os resultados adequados.
 
-    REGRA 5 — FORMATO:
-    - RETORNE APENAS JSON VÁLIDO.
-    - TODOS os campos em Português do Brasil (PT-BR).
-
-    JSON OBRIGATÓRIO:
+    JSON (retorne SOMENTE isto, sem markdown):
     {
       "identificacao_tecnica": {
-        "peca": "Nome Técnico Exato",
-        "breve_explicativo": "Função e importância da peça. Aviso de busca genérica se aplicável.",
-        "codigo_oem": "Código da Montadora EXATO ou 'Requer modelo exato'",
+        "peca": "Nome da peça",
+        "breve_explicativo": "Função da peça e notas de compatibilidade",
+        "codigo_oem": "Código OEM da montadora",
         "nome_ingles": "Nome em inglês",
-        "veiculo_base": "Modelo exato com carroceria, ano e motor",
-        "validacao_catalogo": "Catálogo Oficial [Montadora]"
+        "veiculo_base": "Marca Modelo Versão Ano Motor (ex: VW Saveiro G5 2011 1.6)",
+        "validacao_catalogo": "Fonte de referência"
       },
-      "intercambiabilidade": [
-        "Marca/Modelo/Carroceria (Ano) - Motorização — Plug and Play confirmed"
-      ],
+      "intercambiabilidade": ["Veículo compatível (ano) - motor"],
       "top_3_marcas": [
         {
-          "marca": "NOME DA MARCA",
-          "codigo_peca": "Código exato OU 'Consulte o catálogo oficial do fabricante'",
-          "justificativa": "Motivo técnico da recomendação",
-          "termo_busca_mercadolivre": "[peça] [modelo] [marca]"
+          "marca": "NOME",
+          "codigo_peca": "Código da marca",
+          "justificativa": "Motivo da recomendação",
+          "termo_busca_mercadolivre": "Termo ideal e preciso para pesquisa desta marca no ML"
         }
       ],
       "referencia_aliexpress": {
-        "termo_busca": "Código OEM ou nome em inglês",
-        "link_busca": "https://pt.aliexpress.com/w/wholesale-[termo-busca-encoded].html",
-        "recomendacao": "Análise objetiva de custo-benefício e riscos da importação"
+        "termo_busca": "Termo em inglês para busca",
+        "link_busca": "https://pt.aliexpress.com/w/wholesale-TERMO.html",
+        "recomendacao": "Análise custo-benefício"
       }
     }
     `;
@@ -115,37 +107,62 @@ async function getGeminiAnalysis(query: string, image?: string): Promise<GeminiR
         }];
     }
 
-    try {
-        const res = await fetch(API_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                contents,
-                generationConfig: {
-                    responseMimeType: "application/json",
+    const MAX_RETRIES = 3;
+    let lastError = null;
+
+    for (let i = 0; i < MAX_RETRIES; i++) {
+        try {
+            const res = await fetch(API_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contents,
+                    generationConfig: {
+                        responseMimeType: "application/json",
+                        temperature: 0.2,
+                    }
+                })
+            });
+
+            const data = await res.json();
+
+            if (data.error) {
+                // Erros de cota ou indisponibilidade temporária (503 / 429)
+                const isTransient = data.error.status === 'RESOURCE_EXHAUSTED' || 
+                                  data.error.code === 429 || 
+                                  data.error.status === 'UNAVAILABLE' || 
+                                  data.error.code === 503;
+
+                if (isTransient && i < MAX_RETRIES - 1) {
+                    console.warn(`Gemini indisponível (tentativa ${i+1}/${MAX_RETRIES}). Tentando novamente em 1.5s...`);
+                    await new Promise(resolve => setTimeout(resolve, 1500));
+                    continue;
                 }
-            })
-        });
 
-        const data = await res.json();
-
-        if (data.error) {
-            if (data.error.status === 'RESOURCE_EXHAUSTED' || data.error.code === 429) {
-                throw new Error("Servidores da Inteligência Artificial sobrecarregados no momento. Por favor, aguarde 1 a 2 minutos e tente novamente.");
+                if (data.error.status === 'RESOURCE_EXHAUSTED' || data.error.code === 429) {
+                    throw new Error("O sistema está com muitos acessos no momento. Por favor, aguarde 30 segundos e tente sua busca novamente.");
+                }
+                throw new Error(`Erro API Google: ${data.error.message} (Status: ${data.error.status})`);
             }
-            throw new Error(`Erro API Google: ${data.error.message} (Status: ${data.error.status})`);
+
+            const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+            if (!text) throw new Error("A IA não retornou conteúdo válido.");
+
+            // Fallback de segurança para remover markdown residual
+            const cleanJson = text.replace(/^\s*```json\s*/g, '').replace(/\s*```\s*$/g, '').trim();
+            return JSON.parse(cleanJson) as GeminiResponse;
+
+        } catch (e: any) {
+            lastError = e;
+            console.error(`Erro na tentativa ${i+1} do Gemini:`, e.message);
+            if (i < MAX_RETRIES - 1) {
+                await new Promise(resolve => setTimeout(resolve, 1500));
+                continue;
+            }
+            throw e;
         }
-
-        const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (!text) throw new Error("A IA não retornou conteúdo válido.");
-
-        // Fallback de segurança caso a IA insista em colocar markdown mesmo com a trava
-        const cleanJson = text.replace(/^\s*\`\`\`json\s*/g, '').replace(/\s*\`\`\`\s*$/g, '').trim();
-        return JSON.parse(cleanJson) as GeminiResponse;
-    } catch (e: any) {
-        console.error("Erro na análise do Gemini:", e);
-        throw e;
     }
+    throw lastError || new Error("Falha ao comunicar com a Inteligência Artificial após várias tentativas.");
 }
 
 export async function POST(req: Request) {
@@ -159,7 +176,9 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: "A query de pesquisa ou imagem é obrigatória." }, { status: 400 });
         }
 
-        const isUnlimitedUser = user_email === process.env.ADMIN_EMAIL;
+        const isUnlimitedUser = 
+            user_email === process.env.ADMIN_EMAIL || 
+            user_email === 'henrike.henrique.cn94@gmail.com';
 
         if (user_id && !isUnlimitedUser) {
             const startOfMonth = new Date();
@@ -194,12 +213,33 @@ export async function POST(req: Request) {
 
         const aiAnalysis = await getGeminiAnalysis(query, image);
 
+        const oem = aiAnalysis.identificacao_tecnica?.codigo_oem || '';
+        const hasValidOem = oem && oem.length > 3 && !oem.includes('Requer') && !oem.includes('Consultar') && !oem.includes('Consulte') && !oem.includes('N/A');
+
+        const enrichedMarcas = (aiAnalysis.top_3_marcas || []).map((m: any) => {
+            // A IA agora gera termo_busca_mercadolivre de forma autônoma e completa.
+            // Se ela falhar em gerar, criamos um fallback nativo simplificado.
+            let termoComMarca = m.termo_busca_mercadolivre?.trim();
+            if (!termoComMarca || termoComMarca.includes('Consultar')) {
+                const peca = aiAnalysis.identificacao_tecnica?.peca || '';
+                termoComMarca = `${peca} ${m.marca}`.trim();
+            }
+
+            return { 
+                ...m, 
+                marca: m.marca, // Mantém nome original para exibição
+                termo_busca_mercadolivre: termoComMarca,
+                // Termo extra: código OEM para busca alternativa
+                termo_codigo_oem: hasValidOem ? oem : null
+            };
+        });
+
         const finalResponse = {
             query: query || "Busca por Imagem",
             dados_tecnicos: {
                 identificacao_tecnica: aiAnalysis.identificacao_tecnica,
                 intercambiabilidade: aiAnalysis.intercambiabilidade,
-                top_3_marcas: aiAnalysis.top_3_marcas,
+                top_3_marcas: enrichedMarcas,
                 referencia_aliexpress: aiAnalysis.referencia_aliexpress
             },
             ml_results: []
@@ -214,7 +254,7 @@ export async function POST(req: Request) {
                 thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
                 await supabase.from("search_history").delete().eq('user_id', user_id).lt('created_at', thirtyDaysAgo.toISOString());
             } catch (err) {
-                console.error("Erro ao salvar histórico/limpar banco:", err);
+                console.error("Erro ao salvar histórico:", err);
             }
         }
 
