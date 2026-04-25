@@ -46,6 +46,8 @@ export default function Home() {
     peca: ''
   });
   const [abortController, setAbortController] = useState<AbortController | null>(null);
+  const [cuponsData, setCuponsData] = useState<any[]>([]);
+  const [loadingCupons, setLoadingCupons] = useState(false);
 
   const handleCancelSearch = () => {
     if (abortController) {
@@ -89,6 +91,49 @@ export default function Home() {
     return Array.from(new Uint8Array(buffer)).map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 32);
   };
   useEffect(() => {
+    // Fetch cupons when component mounts
+    const fetchCupons = async () => {
+      setLoadingCupons(true);
+      try {
+        const today = new Date().toISOString().split('T')[0];
+        const { data, error } = await supabase
+          .from('cupons')
+          .select('*')
+          .eq('ativo', true)
+          .gte('data_validade', today)
+          .order('ordem', { ascending: true });
+        
+        if (!error && data && data.length > 0) {
+          // Shuffle para aparecerem variados
+          const shuffled = [...data].sort(() => Math.random() - 0.5);
+          setCuponsData(shuffled);
+        } else {
+          // Fallback if table doesn't exist or is empty
+          const fallback = [
+            { titulo: "Mercado Livre - Auto", descricao: "10% OFF em Autopeças Acima de R$200", codigo: "AUTO10", link: buildMlLink("acessorios para veiculos") },
+            { titulo: "Freios e Suspensão", descricao: "Frete Grátis + 5% Extra em Pastilhas", codigo: "FREIOS5", link: buildMlLink("pastilha de freio") },
+            { titulo: "Óleo e Filtros", descricao: "Kits de Revisão com 15% OFF (Via App)", codigo: "REVISAO15", link: buildMlLink("kit revisao oleo") },
+            { titulo: "Acessórios Internos", descricao: "R$30 de Desconto na primeira compra", codigo: "BEMVINDO30", link: buildMlLink("acessorios carros") },
+            { titulo: "Pneus Diversos", descricao: "Frete Grátis em Pneus aros 14 a 17", codigo: "PNEUSFREE", link: buildMlLink("pneu automotivo") },
+            { titulo: "Baterias Moura/Heliar", descricao: "5% de volta comprando a base de troca", codigo: "BATERIA5", link: buildMlLink("bateria de carro") }
+          ];
+          setCuponsData(fallback.sort(() => Math.random() - 0.5));
+        }
+      } catch (err) {
+        // Fallback
+        const fallback = [
+          { titulo: "Mercado Livre - Auto", descricao: "10% OFF em Autopeças Acima de R$200", codigo: "AUTO10", link: buildMlLink("acessorios para veiculos") },
+          { titulo: "Freios e Suspensão", descricao: "Frete Grátis + 5% Extra em Pastilhas", codigo: "FREIOS5", link: buildMlLink("pastilha de freio") },
+          { titulo: "Óleo e Filtros", descricao: "Kits de Revisão com 15% OFF (Via App)", codigo: "REVISAO15", link: buildMlLink("kit revisao oleo") },
+          { titulo: "Acessórios Internos", descricao: "R$30 de Desconto na primeira compra", codigo: "BEMVINDO30", link: buildMlLink("acessorios carros") }
+        ];
+        setCuponsData(fallback.sort(() => Math.random() - 0.5));
+      } finally {
+        setLoadingCupons(false);
+      }
+    };
+    fetchCupons();
+
     const fetchProfile = async (userId: string) => {
       const { data } = await supabase.from('profiles').select('full_name').eq('id', userId).single();
       setProfile(data);
@@ -645,53 +690,53 @@ export default function Home() {
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {[
-                  { title: "Mercado Livre - Auto", desc: "10% OFF em Autopeças Acima de R$200", code: "AUTO10", link: buildMlLink("acessorios para veiculos") },
-                  { title: "Freios e Suspensão", desc: "Frete Grátis + 5% Extra em Pastilhas", code: "FREIOS5", link: buildMlLink("pastilha de freio") },
-                  { title: "Óleo e Filtros", desc: "Kits de Revisão com 15% OFF (Via App)", code: "REVISAO15", link: buildMlLink("kit revisao oleo") },
-                  { title: "Acessórios Internos", desc: "R$30 de Desconto na primeira compra", code: "BEMVINDO30", link: buildMlLink("acessorios carros") },
-                ].map((coupon, i) => (
-                  <div key={i} className="flex flex-col bg-[#2C2C2E]/60 border border-dashed border-[#32ADE6]/40 rounded-2xl p-5 hover:border-[#32ADE6] transition-colors group relative overflow-hidden">
-                    <div className="absolute top-0 right-0 bg-[#32ADE6]/10 text-[#32ADE6] text-[10px] font-bold px-2.5 py-1 rounded-bl-xl uppercase tracking-widest border-b border-l border-[#32ADE6]/20">
-                      Verificado
-                    </div>
-                    <div className="flex items-center gap-3 mb-2">
-                      <div className="w-10 h-10 rounded-full bg-[#32ADE6]/10 flex items-center justify-center shrink-0">
-                        <Tag className="w-5 h-5 text-[#32ADE6]" />
-                      </div>
-                      <div>
-                        <h3 className="text-white font-bold text-[15px]">{coupon.title}</h3>
-                        <p className="text-[#8E8E93] text-[12px] mt-0.5">{coupon.desc}</p>
-                      </div>
-                    </div>
-                    
-                    <div className="mt-auto pt-4 flex items-center gap-2">
-                      <div className="flex-1 bg-black/40 border border-white/10 rounded-xl px-3 py-2 flex items-center justify-between group-hover:border-[#32ADE6]/30 transition-colors">
-                        <span className="font-mono text-[#32ADE6] font-bold tracking-wider text-[14px]">{coupon.code}</span>
-                        <button 
-                          className="text-[#8E8E93] hover:text-white transition-colors" 
-                          title="Copiar cupom"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            navigator.clipboard.writeText(coupon.code);
-                            // Pode-se adicionar um toast aqui depois
-                          }}
-                        >
-                          <Copy className="w-4 h-4" />
-                        </button>
-                      </div>
-                      <a 
-                        href={coupon.link} 
-                        target="_blank" 
-                        rel="noreferrer"
-                        className="bg-[#32ADE6] hover:bg-[#2892C6] text-white p-2.5 rounded-xl transition-colors shrink-0"
-                        title="Usar cupom"
-                      >
-                        <Zap className="w-4 h-4" />
-                      </a>
-                    </div>
+                {loadingCupons ? (
+                  <div className="flex justify-center col-span-1 sm:col-span-2 py-8">
+                    <Loader2 className="w-8 h-8 text-[#32ADE6] animate-spin" />
                   </div>
-                ))}
+                ) : (
+                  cuponsData.map((coupon, i) => (
+                    <div key={i} className="flex flex-col bg-[#2C2C2E]/60 border border-dashed border-[#32ADE6]/40 rounded-2xl p-5 hover:border-[#32ADE6] transition-colors group relative overflow-hidden">
+                      <div className="absolute top-0 right-0 bg-[#32ADE6]/10 text-[#32ADE6] text-[10px] font-bold px-2.5 py-1 rounded-bl-xl uppercase tracking-widest border-b border-l border-[#32ADE6]/20">
+                        Verificado Hoje
+                      </div>
+                      <div className="flex items-center gap-3 mb-2">
+                        <div className="w-10 h-10 rounded-full bg-[#32ADE6]/10 flex items-center justify-center shrink-0">
+                          <Tag className="w-5 h-5 text-[#32ADE6]" />
+                        </div>
+                        <div>
+                          <h3 className="text-white font-bold text-[15px]">{coupon.titulo || coupon.title}</h3>
+                          <p className="text-[#8E8E93] text-[12px] mt-0.5">{coupon.descricao || coupon.desc}</p>
+                        </div>
+                      </div>
+                      
+                      <div className="mt-auto pt-4 flex items-center gap-2">
+                        <div className="flex-1 bg-black/40 border border-white/10 rounded-xl px-3 py-2 flex items-center justify-between group-hover:border-[#32ADE6]/30 transition-colors">
+                          <span className="font-mono text-[#32ADE6] font-bold tracking-wider text-[14px]">{coupon.codigo || coupon.code}</span>
+                          <button 
+                            className="text-[#8E8E93] hover:text-white transition-colors" 
+                            title="Copiar cupom"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              navigator.clipboard.writeText(coupon.codigo || coupon.code);
+                            }}
+                          >
+                            <Copy className="w-4 h-4" />
+                          </button>
+                        </div>
+                        <a 
+                          href={coupon.link} 
+                          target="_blank" 
+                          rel="noreferrer"
+                          className="bg-[#32ADE6] hover:bg-[#2892C6] text-white p-2.5 rounded-xl transition-colors shrink-0"
+                          title="Usar cupom"
+                        >
+                          <Zap className="w-4 h-4" />
+                        </a>
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           ) : null}

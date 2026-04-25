@@ -1,0 +1,90 @@
+
+=== [1] QUERY: "Kit válvulas  Audi A3 Sportback 2010 2.0 TFSI (EA888)" — 09/04/2026, 16:44:45 ===
+  PEÇA: Kit de Válvulas do Motor (Admissão e Escape)
+  OEM: 06J109601F
+  VEÍCULO: Audi A3 Sportback (8P) 2010 - Motor 2.0 TFSI (EA888 Gen2)
+  TOP 3 MARCAS:
+    [0] Mahle | cod: 021 VA 31016 100 (Válvula de Admissão) | TERMO_ML: "valvula admissao audi mahle"
+    [1] Kolbenschmidt (KS) | cod: 80 000523 100 (Válvula de Admissão) | TERMO_ML: "valvula admissao audi kolbenschmidt"
+    [2] AE (Federal-Mogul) | cod: V94709 (Válvula de Admissão) | TERMO_ML: "valvula admissao audi ae"
+
+=== [2] QUERY: "Busca por Imagem" — 07/04/2026, 10:11:43 ===
+  PEÇA: Comutador de Seta e Farol
+  OEM: 735252875
+  VEÍCULO: Fiat Palio Fire G3 (2004-2016) - 1.0/1.3/1.4/1.8 Flex (Modelos com farol biparabólico e sem limpador traseiro)
+  TOP 3 MARCAS:
+    [0] KOSTAL | cod: 100172390 | TERMO_ML: "comutador seta palio kostal"
+    [1] MARILIA | cod: IM11094 | TERMO_ML: "comutador seta palio marilia"
+    [2] DS | cod: 1419 | TERMO_ML: "comutador seta palio DS"
+
+=== [3] QUERY: "Kit corrente comando Audi A3 Sportback 8P 2011" — 06/04/2026, 18:58:19 ===
+  PEÇA: Kit Corrente de Comando (Distribuição)
+  OEM: 06H109158H (corrente principal - referência para sistema, o kit completo OEM não possui um único PN)
+  VEÍCULO: Audi A3 Sportback 8P (2011) - Motor 2.0 TFSI (EA888 Gen2 - ex: CCZA, CAWB)
+  TOP 3 MARCAS:
+    [0] INA (Schaeffler Group) | cod: 559 0089 10 | TERMO_ML: "corrente comando audi ina"
+    [1] FEBI BILSTEIN | cod: 101691 | TERMO_ML: "corrente comando audi febi"
+    [2] MEYLE (HD Quality) | cod: 100 950 0004 | TERMO_ML: "corrente comando audi meyle"
+
+=== [4] QUERY: "Lampada farol baixo  Toyota Corolla 2020 2.0 16V" — 06/04/2026, 14:49:26 ===
+  PEÇA: Lâmpada do Farol Baixo (Módulo LED Integrado)
+  OEM: N/A como lâmpada separada. O código OEM refere-se ao conjunto completo do farol (ex: 81130-02N20 - Direito / 81170-02N20 - Esquerdo).
+  VEÍCULO: Toyota Corolla Sedan 2.0 16V Dynamic Force (M20A-FKS) 2020 (XEi/Altis/Altis Premium)
+  TOP 3 MARCAS:
+    [0] Philips | cod: 11362U90CWX2 (Exemplo para LED retrofit H11) | TERMO_ML: "lampada farol philips"
+    [1] Osram | cod: 64211DWBR (Exemplo para LED retrofit H11) | TERMO_ML: "lampada farol osram"
+    [2] Sylvania | cod: H11ZEVO (Exemplo para LED retrofit H11 da linha ZEVO) | TERMO_ML: "lampada farol sylvania"
+
+=== [5] QUERY: "Válvula de pressão flauta Audi A3 Sportback 8P 2011" — 06/04/2026, 10:16:36 ===
+  PEÇA: Sensor de Pressão da Flauta de Combustível
+  OEM: 06J906051A
+  VEÍCULO: Audi A3 Sportback 8P (2011) - Motor 2.0 TFSI (ex: CCZA)
+  TOP 3 MARCAS:
+    [0] Bosch | cod: 0 261 545 074 | TERMO_ML: "sensor pressão flauta bosch"
+    [1] VDO (Continental) | cod: A2C59513369 | TERMO_ML: "sensor pressão flauta vdo"
+    [2] Febi Bilstein | cod: 45293 | TERMO_ML: "sensor pressão flauta febi"
+
+=== [6] QUERY: "Busca por Imagem" — 05/04/2026, 15:36:25 ===
+  PEÇA: Chave de Seta e Limpador de Parabrisa com Comando de Farol Biparábola
+  OEM: 10002290 (Fiat)
+  VEÍCULO: Fiat Palio Fire Hatch 1.0 (2001-2016) - Com Farol Biparábola
+  TOP 3 MARCAS:
+    [0] Kostal | cod: 100 172 390 (Fabricante original) | TERMO_ML: "chave seta palio kostal"
+    [1] Valens | cod: VE08200 | TERMO_ML: "chave seta palio valens"
+    [2] E-Klas | cod: EK.9008 | TERMO_ML: "chave seta palio eklas"
+
+=== [7] QUERY: "homocinetica palio 1.4 2010" — 04/04/2026, 13:01:45 ===
+  PEÇA: Junta Homocinética Externa (Kit)
+  OEM: 50017139
+  VEÍCULO: Fiat Palio Fire 1.4 8V (G4) 2010 - Motor Fire Flex
+  TOP 3 MARCAS:
+    [0] Nakata | cod: NJH23-537 | TERMO_ML: "homocinetica palio nakata"
+    [1] Spicer (Dana) | cod: 2-537 | TERMO_ML: "homocinetica palio spicer"
+    [2] Cofap (Magneti Marelli) | cod: JHC01004 | TERMO_ML: "homocinetica palio cofap"
+
+=== [8] QUERY: "homocinetica palio 1.4 2010" — 04/04/2026, 12:39:36 ===
+  PEÇA: Junta Homocinética Fixa (Lado Roda)
+  OEM: 51785566
+  VEÍCULO: Fiat Palio G4 2010 1.4 8V
+  TOP 3 MARCAS:
+    [0] Nakata | cod: NJH01-7001 | TERMO_ML: "Junta Homocinética Fixa Palio G4 2010 Nakata"
+    [1] Spicer | cod: 2100-100 | TERMO_ML: "Junta Homocinética Fixa Palio G4 2010 Spicer"
+    [2] Cofap | cod: JHC01001 | TERMO_ML: "Junta Homocinética Fixa Palio G4 2010 Cofap"
+
+=== [9] QUERY: "suporte tampão porta malas  Fiat Palio 2010 1.4 Fire" — 04/04/2026, 12:39:22 ===
+  PEÇA: Suporte do Tampão do Porta-Malas (Cordinha)
+  OEM: Consultar fornecedor (geralmente não possui código OEM individual para a cordinha, sendo um item aftermarket ou parte de um kit de acabamento)
+  VEÍCULO: Fiat Palio G4 2010 1.4 Fire
+  TOP 3 MARCAS:
+    [0] Rainha das Sete | cod: Consultar fornecedor | TERMO_ML: "Suporte Tampão Porta-Malas Palio G4 2010 Rainha das"
+    [1] Universal Automotive | cod: Consultar fornecedor | TERMO_ML: "Suporte Tampão Porta-Malas Palio G4 2010 Universal Automotive"
+    [2] DNI | cod: Consultar fornecedor | TERMO_ML: "Suporte Tampão Porta-Malas Palio G4 2010 DNI"
+
+=== [10] QUERY: "suporte tampão porta malas  Fiat Palio 2010 1.4 Fire" — 04/04/2026, 12:27:57 ===
+  PEÇA: Suporte do Tampão do Porta-Malas
+  OEM: 51723652
+  VEÍCULO: Fiat Palio G4 2010 1.4 Fire
+  TOP 3 MARCAS:
+    [0] Original Fiat | cod: 51723652 | TERMO_ML: "Suporte Tampão Porta-Malas Palio G4 2010 Original Fiat"
+    [1] Valplast | cod: Consultar fornecedor | TERMO_ML: "Suporte Tampão Porta-Malas Palio G4 2010 Valplast"
+    [2] Universal / Paralelo | cod: Consultar fornecedor | TERMO_ML: "Suporte Tampão Porta-Malas Palio G4 2010 Universal /"

@@ -26,66 +26,76 @@ interface GeminiResponse {
     };
 }
 
-// Detecta se a query parece um código de peça (alfanumérico, sem espaços ou com hifens)
-function isPartCode(query: string): boolean {
-    if (!query) return false;
-    const trimmed = query.trim();
-    // Padrões comuns de códigos OEM: ex 04E115561B, 33100-KWW-J00, 1J0615301B, W01-358-8041
-    return /^[A-Z0-9]{3,}[-]?[A-Z0-9]+$/i.test(trimmed.replace(/\s/g, ''));
-}
-
 async function getGeminiAnalysis(query: string, image?: string): Promise<GeminiResponse> {
-    const apiKey = (process.env.GEMINI_API_KEY || "").trim();
+    const apiKey = process.env.GEMINI_API_KEY;
 
     if (!apiKey) {
-        console.error("ERRO: GEMINI_API_KEY não encontrada no process.env");
         throw new Error("Erro de Configuração. A chave de API (GEMINI_API_KEY) não foi encontrada no servidor.");
     }
 
     const MODEL_NAME = "gemini-2.5-flash";
     const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${apiKey}`;
 
-    const buscaPorCodigo = isPartCode(query);
-
     const promptMestre = `
-    Você é um cataloguista técnico automotivo. Sua única tarefa é identificar a peça exata e retornar dados técnicos em JSON.
+    PERSONA: Você é um Especialista Sênior em Catálogos de Peças Automotivas com acesso a bancos de dados oficiais de todas as montadoras.
+    
+    MISSÃO: Analisar a pesquisa: "${query || "Imagem da peça."}" e recomendar as 3 MELHORES MARCAS de peças aftermarket.
 
-    PESQUISA DO USUÁRIO: "${query || "Imagem da peça."}"
+    REGRA 1 — ANTI-ALUCINAÇÃO GERAL:
+    Se a pesquisa for GENÉRICA (sem modelo exato, ano e motorização):
+    - NÃO INVENTE códigos OEM ou da marca. Use "Requer modelo exato" ou "Consultar Catálogo".
+    - Adicione AVISO no "breve_explicativo": "ATENÇÃO: Busca genérica. Especifique modelo, ano e motor para código exato."
+    - Use termos AMPLOS nos links do Mercado Livre (sem marca específica).
 
-    ${buscaPorCodigo ? `ATENÇÃO: "${query}" é um CÓDIGO DE PEÇA. Identifique fabricante e tipo pela numeração. O campo codigo_oem deve ser "${query}".` : ''}
+    REGRA 2 — CÓDIGOS DE PEÇA (OBRIGATÓRIO):
+    - É SEU DEVER OBRIGATÓRIO fornecer o Código OEM genuíno e o Código da Marca Aftermarket correspondente. 
+    - O painel é usado por mecânicos que precisam do CÓDIGO EXATO para compra. 
+    - EVITE ao máximo "Consulte o catálogo". Pesquise em sua base interna até encontrar o código de referência cruzada correto para cada uma das 3 marcas.
 
-    INSTRUÇÕES:
-    1. Identifique a peça, o veículo (com ANO e GERAÇÃO obrigatórios) e o código OEM.
-    2. Recomende 3 marcas aftermarket com seus códigos de referência cruzada.
-    3. Preencha o JSON abaixo. NÃO adicione texto fora do JSON.
+    REGRA 3 — TERMOS DE BUSCA NO MERCADO LIVRE:
+    - O campo "termo_busca_mercadolivre" será usado diretamente na API de busca do ML.
+    - DEVE SER EXTREMAMENTE ENXUTO. Máximo de 4 palavras-chave. Nada de hifens.
+    - Foque APENAS: Peça Principal + Modelo Principal + Marca Aftermarket
+    - NUNCA inclua palavras genéricas como "para", "de", "do", "original", "genuíno", etc.
+    
+    Exemplos CORRETOS:
+    - "pastilha freio golf textar"
+    - "bomba combustivel audi continental"
+    - "filtro oleo corsa mann"
 
-    REGRAS CRÍTICAS:
-    - Se a pesquisa menciona um ano (ex: "2011"), a geração do veículo DEVE ser identificada (ex: VW Saveiro 2011 = G5).
-    - Se a pesquisa menciona uma versão (Cross, GTI, etc.), a peça deve ser específica dessa versão.
-    - Forneça códigos reais. Se não souber com certeza, use "Consultar fornecedor".
+    REGRA 4 — INTERCAMBIABILIDADE:
+    - Liste APENAS veículos com CONFIRMAÇÃO de compatibilidade cruzada (plug and play).
+    - NÃO liste veículos "possivelmente compatíveis".
 
-    JSON (retorne SOMENTE isto, sem markdown):
+    REGRA 5 — FORMATO:
+    - RETORNE APENAS JSON VÁLIDO.
+    - TODOS os campos em Português do Brasil (PT-BR).
+
+    JSON OBRIGATÓRIO:
     {
       "identificacao_tecnica": {
-        "peca": "Nome da peça",
-        "breve_explicativo": "Função da peça e notas de compatibilidade",
-        "codigo_oem": "Código OEM da montadora",
+        "peca": "Nome Técnico Exato",
+        "breve_explicativo": "Função e importância da peça. Aviso de busca genérica se aplicável.",
+        "codigo_oem": "Código da Montadora EXATO ou 'Requer modelo exato'",
         "nome_ingles": "Nome em inglês",
-        "veiculo_base": "Marca Modelo Versão Ano Motor (ex: VW Saveiro G5 2011 1.6)",
-        "validacao_catalogo": "Fonte de referência"
+        "veiculo_base": "Modelo exato com carroceria, ano e motor",
+        "validacao_catalogo": "Catálogo Oficial [Montadora]"
       },
-      "intercambiabilidade": ["Veículo compatível (ano) - motor"],
+      "intercambiabilidade": [
+        "Marca/Modelo/Carroceria (Ano) - Motorização — Plug and Play confirmed"
+      ],
       "top_3_marcas": [
         {
-          "marca": "NOME",
-          "codigo_peca": "Código da marca",
-          "justificativa": "Motivo da recomendação"
+          "marca": "NOME DA MARCA",
+          "codigo_peca": "Código exato OU 'Consulte o catálogo oficial do fabricante'",
+          "justificativa": "Motivo técnico da recomendação",
+          "termo_busca_mercadolivre": "[peça] [modelo] [marca]"
         }
       ],
       "referencia_aliexpress": {
-        "termo_busca": "Termo em inglês para busca",
-        "link_busca": "https://pt.aliexpress.com/w/wholesale-TERMO.html",
-        "recomendacao": "Análise custo-benefício"
+        "termo_busca": "Código OEM ou nome em inglês",
+        "link_busca": "https://pt.aliexpress.com/w/wholesale-[termo-busca-encoded].html",
+        "recomendacao": "Análise objetiva de custo-benefício e riscos da importação"
       }
     }
     `;
@@ -129,8 +139,8 @@ async function getGeminiAnalysis(query: string, image?: string): Promise<GeminiR
         const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
         if (!text) throw new Error("A IA não retornou conteúdo válido.");
 
-        // Fallback de segurança para remover markdown residual
-        const cleanJson = text.replace(/^\s*```json\s*/g, '').replace(/\s*```\s*$/g, '').trim();
+        // Fallback de segurança caso a IA insista em colocar markdown mesmo com a trava
+        const cleanJson = text.replace(/^\s*\`\`\`json\s*/g, '').replace(/\s*\`\`\`\s*$/g, '').trim();
         return JSON.parse(cleanJson) as GeminiResponse;
     } catch (e: any) {
         console.error("Erro na análise do Gemini:", e);
@@ -149,9 +159,7 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: "A query de pesquisa ou imagem é obrigatória." }, { status: 400 });
         }
 
-        const isUnlimitedUser = 
-            user_email === process.env.ADMIN_EMAIL || 
-            user_email === 'henrike.henrique.cn94@gmail.com';
+        const isUnlimitedUser = user_email === process.env.ADMIN_EMAIL;
 
         if (user_id && !isUnlimitedUser) {
             const startOfMonth = new Date();
@@ -186,64 +194,12 @@ export async function POST(req: Request) {
 
         const aiAnalysis = await getGeminiAnalysis(query, image);
 
-        // --- CONSTRUÇÃO SERVER-SIDE dos termos de busca do Mercado Livre ---
-        // Estratégia: Busca DESCRITIVA (funciona melhor no ML Brasil para autopeças)
-        // Formato: [Peça] [Modelo] [Ano] — SEM marca no termo (para ampliar resultados)
-        // A marca vai separada nos cards individuais
-        const oem = aiAnalysis.identificacao_tecnica?.codigo_oem || '';
-        const peca = aiAnalysis.identificacao_tecnica?.peca || '';
-        const veiculoBase = aiAnalysis.identificacao_tecnica?.veiculo_base || '';
-        const hasValidOem = oem && oem.length > 3 && !oem.includes('Requer') && !oem.includes('Consultar') && !oem.includes('Consulte');
-
-        // Extrai ano do veículo base ou da query original
-        const anoMatch = (veiculoBase + ' ' + query).match(/\b(19|20)\d{2}\b/);
-        const ano = anoMatch ? anoMatch[0] : '';
-
-        // Extrai modelo simplificado do veículo base
-        const modeloMatch = veiculoBase.match(/(?:VW|Volkswagen|Toyota|Ford|Chevrolet|Fiat|Honda|Hyundai|GM|Renault|Nissan|Jeep|RAM|GWM|BYD|Caoa Chery|Mitsubishi|Peugeot|Citroën|BMW|Mercedes|Audi|Kia)\s+(\S+)/i);
-        const modelo = modeloMatch ? modeloMatch[1] : '';
-
-        // Extrai geração (G5, G6, MK7, etc.)
-        const geracaoMatch = veiculoBase.match(/\b(G[1-9]|GII|GIII|GIV|GV|GVI|MK\d+|E\d{3})\b/i);
-        const geracao = geracaoMatch ? geracaoMatch[0] : '';
-
-        // Limpa nome da peça (pega as 2-3 primeiras palavras significativas)
-        const pecaLimpa = peca
-            .replace(/\(.*?\)/g, '') // Remove parênteses
-            .replace(/dianteiro|dianteira|traseiro|traseira|completo|completa/gi, (m) => m.toLowerCase())
-            .split(/\s+/)
-            .slice(0, 3)
-            .join(' ')
-            .trim();
-
-        // Limpa nome da marca (remove parênteses, informações extras)
-        function cleanMarca(marca: string): string {
-            return marca.replace(/\s*\(.*?\)\s*/g, '').trim().split(/\s+/).slice(0, 2).join(' ');
-        }
-
-        const enrichedMarcas = (aiAnalysis.top_3_marcas || []).map((m: any) => {
-            const marcaLimpa = cleanMarca(m.marca);
-            
-            // Termo descritivo: [Peça] [Modelo] [Geração/Ano] [Marca]
-            // Ex: "capô saveiro g5 2011" + marca no card
-            const termoBase = `${pecaLimpa} ${modelo} ${geracao} ${ano}`.replace(/\s+/g, ' ').trim();
-            const termoComMarca = `${termoBase} ${marcaLimpa}`.trim();
-
-            return { 
-                ...m, 
-                marca: m.marca, // Mantém nome original para exibição
-                termo_busca_mercadolivre: termoComMarca,
-                // Termo extra: código OEM para busca alternativa
-                termo_codigo_oem: hasValidOem ? oem : null
-            };
-        });
-
         const finalResponse = {
             query: query || "Busca por Imagem",
             dados_tecnicos: {
                 identificacao_tecnica: aiAnalysis.identificacao_tecnica,
                 intercambiabilidade: aiAnalysis.intercambiabilidade,
-                top_3_marcas: enrichedMarcas,
+                top_3_marcas: aiAnalysis.top_3_marcas,
                 referencia_aliexpress: aiAnalysis.referencia_aliexpress
             },
             ml_results: []
@@ -258,7 +214,7 @@ export async function POST(req: Request) {
                 thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
                 await supabase.from("search_history").delete().eq('user_id', user_id).lt('created_at', thirtyDaysAgo.toISOString());
             } catch (err) {
-                console.error("Erro ao salvar histórico:", err);
+                console.error("Erro ao salvar histórico/limpar banco:", err);
             }
         }
 

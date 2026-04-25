@@ -80,9 +80,6 @@ export const vehicleData: Record<string, Record<string, Record<string, string[]>
     "Fox Hatch": Object.fromEntries(Array.from({ length: 19 }, (_, i) => 2021 - i).map(y => [y.toString(), ["1.0 8V", "1.0 12V", "1.6 8V", "1.6 16V MSI"]])),
     "Fusca (Novo)": Object.fromEntries(Array.from({ length: 5 }, (_, i) => 2016 - i).map(y => [y.toString(), ["2.0 TSI"]])),
     "Gol": Object.fromEntries(Array.from({ length: 24 }, (_, i) => 2023 - i).map(y => [y.toString(), ["1.0 8V", "1.0 16V", "1.0 12V MPI", "1.0 TEC", "1.6 AP", "1.6 VHT", "1.6 16V MSI", "1.8 AP"]])),
-    "Gol Power": Object.fromEntries(Array.from({ length: 10 }, (_, i) => 2014 - i).map(y => [y.toString(), ["1.6 SP", "2.0 8V"]])),
-    "Gol G5 (Trend/City)": Object.fromEntries(Array.from({ length: 6 }, (_, i) => 2013 - i).map(y => [y.toString(), ["1.0 8V", "1.6 8V"]])),
-    "Gol GTI": Object.fromEntries(Array.from({ length: 5 }, (_, i) => 2000 - i).map(y => [y.toString(), ["2.0 GTI 16V"]])),
     "Golf Hatch": Object.fromEntries(Array.from({ length: 25 }, (_, i) => 2024 - i).map(y => [y.toString(), ["1.0 TSI", "1.4 TSI", "1.6 8V", "1.8T", "2.0 8V", "2.0 TSI (GTI)"]])),
     "Golf GTI": Object.fromEntries(Array.from({ length: 15 }, (_, i) => 2024 - i).map(y => [y.toString(), ["2.0 TSI GTI"]])),
     "Golf R": Object.fromEntries(Array.from({ length: 12 }, (_, i) => 2024 - i).map(y => [y.toString(), ["2.0 TSI R 4Motion"]])),
@@ -99,9 +96,6 @@ export const vehicleData: Record<string, Record<string, Record<string, string[]>
     "Polo Track": Object.fromEntries(Array.from({ length: 3 }, (_, i) => 2024 - i).map(y => [y.toString(), ["1.0 12V MPI"]])),
     "Polo GTS": Object.fromEntries(Array.from({ length: 6 }, (_, i) => 2024 - i).map(y => [y.toString(), ["1.4 TSI GTS"]])),
     "Saveiro": Object.fromEntries(Array.from({ length: 25 }, (_, i) => 2024 - i).map(y => [y.toString(), ["1.6 AP", "1.6 VHT", "1.6 16V MSI"]])),
-    "Saveiro Cross": Object.fromEntries(Array.from({ length: 15 }, (_, i) => 2022 - i).map(y => [y.toString(), ["1.6 16V MSI (Cross)", "1.6 8V (Cross)"]])),
-    "Saveiro Robust": Object.fromEntries(Array.from({ length: 10 }, (_, i) => 2022 - i).map(y => [y.toString(), ["1.6 16V MSI", "1.6 8V"]])),
-    "Saveiro Trendline": Object.fromEntries(Array.from({ length: 8 }, (_, i) => 2019 - i).map(y => [y.toString(), ["1.6 16V MSI"]])),
     "SpaceCross": Object.fromEntries(Array.from({ length: 7 }, (_, i) => 2017 - i).map(y => [y.toString(), ["1.6 8V", "1.6 16V MSI"]])),
     "SpaceFox": Object.fromEntries(Array.from({ length: 14 }, (_, i) => 2019 - i).map(y => [y.toString(), ["1.6 8V", "1.6 16V MSI"]])),
     "T-Cross": Object.fromEntries(Array.from({ length: 6 }, (_, i) => 2024 - i).map(y => [y.toString(), ["1.0 TSI (200)", "1.4 TSI (250)"]])),
@@ -111,8 +105,7 @@ export const vehicleData: Record<string, Record<string, Record<string, string[]>
     "up!": Object.fromEntries(Array.from({ length: 8 }, (_, i) => 2021 - i).map(y => [y.toString(), ["1.0 12V MPI", "1.0 TSI"]])),
     "Virtus Sedan": Object.fromEntries(Array.from({ length: 7 }, (_, i) => 2024 - i).map(y => [y.toString(), ["1.0 TSI", "1.4 TSI (GTS)", "1.6 16V MSI"]])),
     "Virtus GTS": Object.fromEntries(Array.from({ length: 5 }, (_, i) => 2024 - i).map(y => [y.toString(), ["1.4 TSI GTS"]])),
-    "Voyage": Object.fromEntries(Array.from({ length: 15 }, (_, i) => 2023 - i).map(y => [y.toString(), ["1.0 8V", "1.0 12V MPI", "1.6 8V", "1.6 16V MSI"]])),
-    "Beetle (New Beetle)": Object.fromEntries(Array.from({ length: 18 }, (_, i) => 2015 - i).map(y => [y.toString(), ["2.0 8V", "1.4 TSI"]]))
+    "Voyage": Object.fromEntries(Array.from({ length: 15 }, (_, i) => 2023 - i).map(y => [y.toString(), ["1.0 8V", "1.0 12V MPI", "1.6 8V", "1.6 16V MSI"]]))
   },
   "Chevrolet": {
     "Agile": Object.fromEntries(Array.from({ length: 6 }, (_, i) => 2014 - i).map(y => [y.toString(), ["1.4 Econo.Flex"]])),
@@ -142,9 +135,7 @@ export const vehicleData: Record<string, Record<string, Record<string, string[]>
     "Tracker": Object.fromEntries(Array.from({ length: 24 }, (_, i) => 2024 - i).map(y => [y.toString(), ["1.0 Turbo Flex", "1.2 Turbo Flex", "1.4 Turbo", "1.8 Ecotec", "2.0 16V"]])),
     "Trailblazer": Object.fromEntries(Array.from({ length: 13 }, (_, i) => 2024 - i).map(y => [y.toString(), ["2.8 Turbo Diesel", "3.6 V6"]])),
     "Vectra": Object.fromEntries(Array.from({ length: 12 }, (_, i) => 2011 - i).map(y => [y.toString(), ["2.0 8V", "2.2 16V", "2.4 16V"]])),
-    "Zafira": Object.fromEntries(Array.from({ length: 12 }, (_, i) => 2012 - i).map(y => [y.toString(), ["2.0 8V", "2.0 16V"]])),
-    "Meriva": Object.fromEntries(Array.from({ length: 12 }, (_, i) => 2012 - i).map(y => [y.toString(), ["1.4 Econo.Flex", "1.8 Econo.Flex"]])),
-    "Joy Plus (Onix)": Object.fromEntries(Array.from({ length: 5 }, (_, i) => 2023 - i).map(y => [y.toString(), ["1.0 Flex", "1.0 Turbo Flex"]]))
+    "Zafira": Object.fromEntries(Array.from({ length: 12 }, (_, i) => 2012 - i).map(y => [y.toString(), ["2.0 8V", "2.0 16V"]]))
   },
   "Fiat": {
     "Argo": Object.fromEntries(Array.from({ length: 8 }, (_, i) => 2024 - i).map(y => [y.toString(), ["1.0 Firefly", "1.3 Firefly", "1.8 E.torQ"]])),
@@ -167,9 +158,7 @@ export const vehicleData: Record<string, Record<string, Record<string, string[]>
     "Stilo": Object.fromEntries(Array.from({ length: 9 }, (_, i) => 2011 - i).map(y => [y.toString(), ["1.8 8V", "1.8 16V", "2.4 20V"]])),
     "Strada": Object.fromEntries(Array.from({ length: 25 }, (_, i) => 2024 - i).map(y => [y.toString(), ["1.3 Firefly", "1.4 Fire", "1.5", "1.6 16V", "1.8 Powertrain", "1.8 E.torQ", "1.0 Turbo 200 Flex"]])),
     "Toro": Object.fromEntries(Array.from({ length: 9 }, (_, i) => 2024 - i).map(y => [y.toString(), ["1.8 E.torQ", "1.3 Turbo 270 Flex", "2.0 Turbo Diesel", "2.4 Tigershark"]])),
-    "Uno": Object.fromEntries(Array.from({ length: 22 }, (_, i) => 2021 - i).map(y => [y.toString(), ["1.0 Mille Fire", "1.0 Fire", "1.0 Firefly", "1.3 Firefly", "1.4 Fire"]])),
-    "Fastback": Object.fromEntries(Array.from({ length: 3 }, (_, i) => 2024 - i).map(y => [y.toString(), ["1.0 Turbo 200 Flex", "1.3 Turbo 270 Flex"]])),
-    "500 (Fiat 500)": Object.fromEntries(Array.from({ length: 7 }, (_, i) => 2016 - i).map(y => [y.toString(), ["1.4 8V"]]))
+    "Uno": Object.fromEntries(Array.from({ length: 22 }, (_, i) => 2021 - i).map(y => [y.toString(), ["1.0 Mille Fire", "1.0 Fire", "1.0 Firefly", "1.3 Firefly", "1.4 Fire"]]))
   },
   "Toyota": {
     "Camry": Object.fromEntries(Array.from({ length: 25 }, (_, i) => 2024 - i).map(y => [y.toString(), ["2.4 16V", "2.5 16V", "3.0 V6", "3.5 V6"]])),
@@ -194,8 +183,7 @@ export const vehicleData: Record<string, Record<string, Record<string, string[]>
     "CR-V": Object.fromEntries(Array.from({ length: 25 }, (_, i) => 2024 - i).map(y => [y.toString(), ["2.0 16V", "2.4 16V", "1.5 Turbo"]])),
     "Fit Hatch": Object.fromEntries(Array.from({ length: 19 }, (_, i) => 2021 - i).map(y => [y.toString(), ["1.4 8V", "1.4 16V i-VTEC", "1.5 16V VTEC", "1.5 16V i-VTEC"]])),
     "HR-V": Object.fromEntries(Array.from({ length: 10 }, (_, i) => 2024 - i).map(y => [y.toString(), ["1.5 DI i-VTEC", "1.5 Turbo", "1.8 16V i-VTEC"]])),
-    "WR-V": Object.fromEntries(Array.from({ length: 5 }, (_, i) => 2021 - i).map(y => [y.toString(), ["1.5 16V i-VTEC"]])),
-    "ZR-V": Object.fromEntries(Array.from({ length: 3 }, (_, i) => 2024 - i).map(y => [y.toString(), ["1.5 Turbo"]]))
+    "WR-V": Object.fromEntries(Array.from({ length: 5 }, (_, i) => 2021 - i).map(y => [y.toString(), ["1.5 16V i-VTEC"]]))
   },
   "Hyundai": {
     "Azera": Object.fromEntries(Array.from({ length: 15 }, (_, i) => 2022 - i).map(y => [y.toString(), ["3.0 V6", "3.3 V6"]])),
@@ -311,39 +299,5 @@ export const vehicleData: Record<string, Record<string, Record<string, string[]>
     "XC40": Object.fromEntries(Array.from({ length: 7 }, (_, i) => 2024 - i).map(y => [y.toString(), ["2.0 T4", "2.0 T5 Hybrid", "Recharge Electric"]])),
     "XC60": Object.fromEntries(Array.from({ length: 16 }, (_, i) => 2024 - i).map(y => [y.toString(), ["2.0 T5", "2.0 T8 Hybrid", "3.0 T6"]])),
     "XC90": Object.fromEntries(Array.from({ length: 22 }, (_, i) => 2024 - i).map(y => [y.toString(), ["2.0 T8 Hybrid", "2.5 T", "3.2", "4.4 V8"]]))
-  },
-  "RAM": {
-    "Rampage": Object.fromEntries(Array.from({ length: 2 }, (_, i) => 2024 - i).map(y => [y.toString(), ["2.0 Turbo Diesel", "2.0 Turbo Gasolina (Hurricane 4)"]])),
-    "2500": Object.fromEntries(Array.from({ length: 10 }, (_, i) => 2024 - i).map(y => [y.toString(), ["6.7 Cummins Diesel", "5.7 HEMI V8"]])),
-    "700": Object.fromEntries(Array.from({ length: 5 }, (_, i) => 2024 - i).map(y => [y.toString(), ["1.3 Turbo Flex"]]))
-  },
-  "Caoa Chery": {
-    "Tiggo 3x": Object.fromEntries(Array.from({ length: 5 }, (_, i) => 2022 - i).map(y => [y.toString(), ["1.0 Turbo Flex CVT"]])),
-    "Tiggo 5x": Object.fromEntries(Array.from({ length: 6 }, (_, i) => 2024 - i).map(y => [y.toString(), ["1.5 Turbo Flex", "1.5 Turbo Flex MHEV 48V"]])),
-    "Tiggo 7 Pro": Object.fromEntries(Array.from({ length: 4 }, (_, i) => 2024 - i).map(y => [y.toString(), ["1.5 Turbo Flex", "1.5 Turbo Flex PHEV"]])),
-    "Tiggo 8 Pro": Object.fromEntries(Array.from({ length: 4 }, (_, i) => 2024 - i).map(y => [y.toString(), ["1.6 Turbo", "Pro-E (Híbrido Plug-in)"]])),
-    "Arrizo 6 Pro": Object.fromEntries(Array.from({ length: 4 }, (_, i) => 2024 - i).map(y => [y.toString(), ["1.5 Turbo Flex"]]))
-  },
-  "GWM": {
-    "Haval H6": Object.fromEntries(Array.from({ length: 4 }, (_, i) => 2024 - i).map(y => [y.toString(), ["1.5 Turbo HEV", "1.5 Turbo PHEV"]])),
-    "Haval H6 GT": Object.fromEntries(Array.from({ length: 3 }, (_, i) => 2024 - i).map(y => [y.toString(), ["2.0 Turbo", "2.0 Turbo PHEV"]])),
-    "Poer": Object.fromEntries(Array.from({ length: 3 }, (_, i) => 2024 - i).map(y => [y.toString(), ["2.4 Turbo Diesel"]])),
-    "Ora 03": Object.fromEntries(Array.from({ length: 2 }, (_, i) => 2024 - i).map(y => [y.toString(), ["Elétrico"]]))
-  },
-  "BYD": {
-    "Dolphin": Object.fromEntries(Array.from({ length: 2 }, (_, i) => 2024 - i).map(y => [y.toString(), ["Elétrico"]])),
-    "Seal": Object.fromEntries(Array.from({ length: 2 }, (_, i) => 2024 - i).map(y => [y.toString(), ["Elétrico"]])),
-    "Tang": Object.fromEntries(Array.from({ length: 2 }, (_, i) => 2024 - i).map(y => [y.toString(), ["Elétrico", "Plug-in Hybrid"]])),
-    "King": Object.fromEntries(Array.from({ length: 2 }, (_, i) => 2024 - i).map(y => [y.toString(), ["1.5 Turbo", "Plug-in Hybrid"]]))
-  },
-  "Subaru": {
-    "Forester": Object.fromEntries(Array.from({ length: 20 }, (_, i) => 2024 - i).map(y => [y.toString(), ["2.0 Boxer", "2.0 Boxer Turbo"]])),
-    "Impreza": Object.fromEntries(Array.from({ length: 20 }, (_, i) => 2024 - i).map(y => [y.toString(), ["2.0 Boxer", "2.0 WRX STI"]])),
-    "Outback": Object.fromEntries(Array.from({ length: 15 }, (_, i) => 2024 - i).map(y => [y.toString(), ["3.6 R Boxer", "2.5 Boxer"]]))
-  },
-  "Suzuki": {
-    "Jimny": Object.fromEntries(Array.from({ length: 10 }, (_, i) => 2024 - i).map(y => [y.toString(), ["1.5 16V"]])),
-    "Grand Vitara": Object.fromEntries(Array.from({ length: 15 }, (_, i) => 2014 - i).map(y => [y.toString(), ["2.0 16V", "2.7 V6"]])),
-    "Swift": Object.fromEntries(Array.from({ length: 5 }, (_, i) => 2021 - i).map(y => [y.toString(), ["1.2 16V"]]))
   }
 };

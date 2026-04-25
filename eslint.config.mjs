@@ -15,8 +15,7 @@ const eslintConfig = defineConfig([
     "*.js",
     "test-*.mjs",
     "db-*.mjs",
-    "tmp-*.mjs",
-    "src/**",
+    "tmp-*.mjs"
   ]),
 ]);
 

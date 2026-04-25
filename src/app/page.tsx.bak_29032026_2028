@@ -13,14 +13,6 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { vehicleData } from '@/data/vehicles';
 
-// ---- UTILITÁRIO: Constrói link do Mercado Livre Brasil ----
-const ML_AFFILIATE = 'matt_word=henrique_cruzn&matt_tool=81389334&forceInApp=true&ref=BFOG';
-function buildMlLink(searchTerm: string): string {
-  if (!searchTerm || searchTerm.trim().length === 0) return '#';
-  const cleaned = searchTerm.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
-  return `https://lista.mercadolivre.com.br/${cleaned}?${ML_AFFILIATE}`;
-}
-
 export default function Home() {
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(false);
@@ -259,16 +251,28 @@ export default function Home() {
 
       setResult(data);
 
-      // Monta links de afiliado usando termos gerados pelo SERVIDOR (não pela IA)
+      // Monta links de afiliado diretos com busca por relevância (sem filtro de menor preço)
       if (data.dados_tecnicos?.top_3_marcas && Array.isArray(data.dados_tecnicos.top_3_marcas)) {
         try {
+          const AFFILIATE_PARAMS = 'matt_word=henrique_cruzn&matt_tool=81389334&forceInApp=true&ref=BFOG';
+
           const mlCards = data.dados_tecnicos.top_3_marcas.map((marcaItem: any, index: number) => {
-            const termo = marcaItem.termo_busca_mercadolivre || '';
+            if (!marcaItem.termo_busca_mercadolivre) return null;
+            const term = marcaItem.termo_busca_mercadolivre.trim();
+            // Se o termo parece um código (sem espaços ou com hifens/números predominantemente), envolve em aspas para busca exata no ML
+            const isCode = /^[A-Z0-9-]{5,}$/i.test(term);
+            const searchTermBase = term.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+            const finalTerm = isCode ? `%22${searchTermBase}%22` : searchTermBase;
+
+            // Sanitização final: remove _OrderId_PRICE por segurança em qualquer cenário
+            const baseLink = `https://lista.mercadolivre.com.br/${finalTerm}`;
+            const cleanLink = baseLink.replace(/_OrderId_PRICE/g, '');
+            const finalLink = `${cleanLink}?${AFFILIATE_PARAMS}`;
             return {
               id: `ml-card-${index}-${Date.now()}`,
               title: `${marcaItem.marca} — ${data.dados_tecnicos?.identificacao_tecnica?.peca || 'Peça Automotiva'}`,
               price: null,
-              link: buildMlLink(termo),
+              link: finalLink,
               thumbnail: null,
               brand: marcaItem.marca,
               coupon: null,
@@ -319,30 +323,14 @@ export default function Home() {
     setError(null);
     try {
       const parsedResult = JSON.parse(historyResult);
+      // Verifica se é o formato novo (dados_tecnicos) ou intermediário (analise_tecnica)
       if (parsedResult?.dados_tecnicos || parsedResult?.analise_tecnica) {
-        // Reconstrói termos de busca ML para pesquisas do histórico (mesma lógica do servidor)
-        if (parsedResult?.dados_tecnicos?.top_3_marcas) {
-          const peca = parsedResult.dados_tecnicos.identificacao_tecnica?.peca || '';
-          const veiculoBase = parsedResult.dados_tecnicos.identificacao_tecnica?.veiculo_base || '';
-          const anoMatch = (veiculoBase + ' ' + historyQuery).match(/\b(19|20)\d{2}\b/);
-          const ano = anoMatch ? anoMatch[0] : '';
-          const modeloMatch = veiculoBase.match(/(?:VW|Volkswagen|Toyota|Ford|Chevrolet|Fiat|Honda|Hyundai|GM|Renault|Nissan|Jeep|Mitsubishi|Peugeot|BMW|Mercedes|Audi|Kia)\s+(\S+)/i);
-          const modelo = modeloMatch ? modeloMatch[1] : '';
-          const geracaoMatch = veiculoBase.match(/\b(G[1-9]|GII|GIII|GIV|GV|GVI|MK\d+|E\d{3})\b/i);
-          const geracao = geracaoMatch ? geracaoMatch[0] : '';
-          const pecaLimpa = peca.replace(/\(.*?\)/g, '').split(/\s+/).slice(0, 3).join(' ').trim();
-
-          parsedResult.dados_tecnicos.top_3_marcas = parsedResult.dados_tecnicos.top_3_marcas.map((m: any) => {
-            const marcaLimpa = m.marca.replace(/\s*\(.*?\)\s*/g, '').trim().split(/\s+/).slice(0, 2).join(' ');
-            const termoBase = `${pecaLimpa} ${modelo} ${geracao} ${ano}`.replace(/\s+/g, ' ').trim();
-            return { ...m, termo_busca_mercadolivre: `${termoBase} ${marcaLimpa}`.trim() };
-          });
-        }
         setResult(parsedResult);
       } else {
         setResult({ analise_tecnica: historyResult, ml_results: [] });
       }
     } catch (e) {
+      // Compatibilidade com pesquisas antigas (só string)
       const formattedResult = (historyResult || "").replace(
         /\[RAW_URL:\s*(http[^\]]+)\]/g,
         '[Ver Oferta]($1)'
@@ -740,8 +728,13 @@ export default function Home() {
                   {/* Botão ML */}
                   {(() => {
                     const topMarca = result.dados_tecnicos?.top_3_marcas?.[0];
-                    const searchWord = topMarca?.termo_busca_mercadolivre || '';
-                    const link = buildMlLink(searchWord);
+                    const searchWord = topMarca?.termo_busca_mercadolivre || result.dados_tecnicos?.identificacao_tecnica?.peca || '';
+                    const term = searchWord.trim();
+                    const isCode = /^[A-Z0-9-]{5,}$/i.test(term);
+                    const optimizedTerm = term.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+                    const finalTerm = isCode ? `%22${optimizedTerm}%22` : optimizedTerm;
+
+                    const link = `https://lista.mercadolivre.com.br/${finalTerm}?matt_word=henrique_cruzn&matt_tool=81389334&forceInApp=true&ref=BFOG`;
                     return (
                       <a
                         href={link}
@@ -824,8 +817,15 @@ export default function Home() {
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4">
                         {result.dados_tecnicos.top_3_marcas.map((marcaItem: any, idx: number) => {
                           const isBest = idx === 0;
-                          const termo = (marcaItem.termo_busca_mercadolivre || '').trim();
-                          const mlLink = buildMlLink(termo);
+                          const term = (marcaItem.termo_busca_mercadolivre || '').trim();
+                          const isCode = /^[A-Z0-9-]{5,}$/i.test(term);
+                          const searchTermBase = term.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+                          const finalTerm = isCode ? `%22${searchTermBase}%22` : searchTermBase;
+                          
+                          const baseLink = `https://lista.mercadolivre.com.br/${finalTerm}`;
+                          const mlLink = searchTermBase
+                            ? `${baseLink.replace(/_OrderId_PRICE/g, '')}?matt_word=henrique_cruzn&matt_tool=81389334&forceInApp=true&ref=BFOG`
+                            : '#';
 
                           return (
                             <div key={`brand-${idx}`} className={`bg-[#2C2C2E]/60 border ${isBest ? 'border-[#FF2D55]/50 shadow-[0_4px_15px_rgba(255,45,85,0.15)] ring-1 ring-[#FF2D55]/20' : 'border-white/10'} rounded-2xl p-4 md:p-5 flex flex-col relative overflow-hidden`}>

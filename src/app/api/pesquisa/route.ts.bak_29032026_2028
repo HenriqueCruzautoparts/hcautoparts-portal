@@ -48,44 +48,70 @@ async function getGeminiAnalysis(query: string, image?: string): Promise<GeminiR
     const buscaPorCodigo = isPartCode(query);
 
     const promptMestre = `
-    Você é um cataloguista técnico automotivo. Sua única tarefa é identificar a peça exata e retornar dados técnicos em JSON.
+    PERSONA: Você é um Especialista Sênior em Catálogos de Peças Automotivas com acesso a bancos de dados oficiais de todas as montadoras (Bosch, Mahle, NGK, Mann, SKF etc.) e sistemas de referência cruzada (TecDoc, AutoData, Etka).
+    
+    MISSÃO: Analisar a pesquisa: "${query || "Imagem da peça."}" e retornar as informações técnicas precisas no formato JSON.
 
-    PESQUISA DO USUÁRIO: "${query || "Imagem da peça."}"
+    ${buscaPorCodigo ? `
+    *** MODO: BUSCA POR CÓDIGO DE PEÇA (ALTA PRECISÃO) ***
+    A pesquisa é um código técnico. Siga ESTREITAMENTE:
+    - O campo "codigo_oem" DEVE ser idêntico à pesquisa: "${query}".
+    - No "termo_busca_mercadolivre", use APENAS o código puro. NÃO adicione nomes de peças ou modelos. Ex: "${query}". 
+    - O frontend aplicará aspas "\"" para busca exata.
+    ` : ''}
 
-    ${buscaPorCodigo ? `ATENÇÃO: "${query}" é um CÓDIGO DE PEÇA. Identifique fabricante e tipo pela numeração. O campo codigo_oem deve ser "${query}".` : ''}
+    REGRA 1 — ANTI-DESVIO E DADOS DO VEÍCULO (CRÍTICA):
+    - OBRIGATÓRIO: Identifique e mantenha o ANO e a GERAÇÃO (ex: G5, G6, MK7, etc.) do veículo em todos os campos de resposta. Se o usuário pesquisou "Saveiro 2011", a resposta NÃO pode ser apenas "Saveiro".
+    - Se a versão for CROSS, GTI, TSI, ADVENTURE, etc., ela é parte integrante do nome da peça e do veículo.
+    - NUNCA sugira peças de gerações diferentes (Ex: Peça de G6 para veículo G5 é ERRO GRAVE).
 
-    INSTRUÇÕES:
-    1. Identifique a peça, o veículo (com ANO e GERAÇÃO obrigatórios) e o código OEM.
-    2. Recomende 3 marcas aftermarket com seus códigos de referência cruzada.
-    3. Preencha o JSON abaixo. NÃO adicione texto fora do JSON.
+    REGRA 2 — ANTI-ALUCINAÇÃO E BUSCA GENÉRICA:
+    - Se faltar o Ano ou Motorização na pesquisa do usuário, alerte no "breve_explicativo" que o resultado pode variar, mas tente identificar a Geração provável pelo ano base.
 
-    REGRAS CRÍTICAS:
-    - Se a pesquisa menciona um ano (ex: "2011"), a geração do veículo DEVE ser identificada (ex: VW Saveiro 2011 = G5).
-    - Se a pesquisa menciona uma versão (Cross, GTI, etc.), a peça deve ser específica dessa versão.
-    - Forneça códigos reais. Se não souber com certeza, use "Consultar fornecedor".
+    REGRA 3 — CÓDIGOS DE PEÇA (OBRIGATÓRIO):
+    - Forneça o código OEM e o código correspondente das 3 marcas líderes. O mecânico precisa do código para conferência técnica.
 
-    JSON (retorne SOMENTE isto, sem markdown):
+    REGRA 4 — TERMOS DE BUSCA NO MERCADO LIVRE (OBRIGATORIEDADE DE ANO):
+    - Se for BUSCA POR CÓDIGO: O termo deve ser apenas o Código OEM. 
+    - Se for BUSCA POR NOME: O termo OBRIGATORIAMENTE deve conter: [Peça] + [Modelo] + [ANO/GERAÇÃO] + [Marca].
+    - Exemplo Correto: "capo saveiro 2011" ou "capo saveiro g5 fitam".
+    - Exemplo ERRADO (PROIBIDO): "capo saveiro fitam" (Isso traz a Saveiro G1 e G2 por erro do site).
+    - EXCLUSÃO: NUNCA use termos de preço ("barato", "oferta", "original"). Foco 100% técnico.
+    - Jamais use termos de lado ("esquerdo/direito") a menos que explicitamente pedido.
+
+    REGRA 5 — INTERCAMBIABILIDADE:
+    - Liste apenas modelos que usem a mesma numeração de peça (Plug & Play).
+
+    REGRA 6 — FORMATO:
+    - Retorne APENAS o JSON, sem markdown.
+
+
+
+    JSON OBRIGATÓRIO:
     {
       "identificacao_tecnica": {
-        "peca": "Nome da peça",
-        "breve_explicativo": "Função da peça e notas de compatibilidade",
-        "codigo_oem": "Código OEM da montadora",
+        "peca": "Nome Técnico Exato",
+        "breve_explicativo": "Função e importância da peça. Aviso de busca genérica se aplicável. Nota de versão específica se relevante.",
+        "codigo_oem": "Código da Montadora EXATO ou 'Requer modelo exato'",
         "nome_ingles": "Nome em inglês",
-        "veiculo_base": "Marca Modelo Versão Ano Motor (ex: VW Saveiro G5 2011 1.6)",
-        "validacao_catalogo": "Fonte de referência"
+        "veiculo_base": "Modelo exato com carroceria, versão, ano e motor",
+        "validacao_catalogo": "Catálogo Oficial [Montadora] / TecDoc / Etka"
       },
-      "intercambiabilidade": ["Veículo compatível (ano) - motor"],
+      "intercambiabilidade": [
+        "Marca/Modelo/Versão/Carroceria (Ano) - Motorização — Plug and Play confirmado"
+      ],
       "top_3_marcas": [
         {
-          "marca": "NOME",
-          "codigo_peca": "Código da marca",
-          "justificativa": "Motivo da recomendação"
+          "marca": "NOME DA MARCA",
+          "codigo_peca": "Código exato OU 'Verificar código com o fornecedor'",
+          "justificativa": "Motivo técnico da recomendação",
+          "termo_busca_mercadolivre": "[codigo_ou_peca] [modelo] [marca]"
         }
       ],
       "referencia_aliexpress": {
-        "termo_busca": "Termo em inglês para busca",
-        "link_busca": "https://pt.aliexpress.com/w/wholesale-TERMO.html",
-        "recomendacao": "Análise custo-benefício"
+        "termo_busca": "Código OEM ou nome em inglês",
+        "link_busca": "https://pt.aliexpress.com/w/wholesale-[termo-busca-encoded].html",
+        "recomendacao": "Análise objetiva de custo-benefício e riscos da importação"
       }
     }
     `;
@@ -186,64 +212,12 @@ export async function POST(req: Request) {
 
         const aiAnalysis = await getGeminiAnalysis(query, image);
 
-        // --- CONSTRUÇÃO SERVER-SIDE dos termos de busca do Mercado Livre ---
-        // Estratégia: Busca DESCRITIVA (funciona melhor no ML Brasil para autopeças)
-        // Formato: [Peça] [Modelo] [Ano] — SEM marca no termo (para ampliar resultados)
-        // A marca vai separada nos cards individuais
-        const oem = aiAnalysis.identificacao_tecnica?.codigo_oem || '';
-        const peca = aiAnalysis.identificacao_tecnica?.peca || '';
-        const veiculoBase = aiAnalysis.identificacao_tecnica?.veiculo_base || '';
-        const hasValidOem = oem && oem.length > 3 && !oem.includes('Requer') && !oem.includes('Consultar') && !oem.includes('Consulte');
-
-        // Extrai ano do veículo base ou da query original
-        const anoMatch = (veiculoBase + ' ' + query).match(/\b(19|20)\d{2}\b/);
-        const ano = anoMatch ? anoMatch[0] : '';
-
-        // Extrai modelo simplificado do veículo base
-        const modeloMatch = veiculoBase.match(/(?:VW|Volkswagen|Toyota|Ford|Chevrolet|Fiat|Honda|Hyundai|GM|Renault|Nissan|Jeep|RAM|GWM|BYD|Caoa Chery|Mitsubishi|Peugeot|Citroën|BMW|Mercedes|Audi|Kia)\s+(\S+)/i);
-        const modelo = modeloMatch ? modeloMatch[1] : '';
-
-        // Extrai geração (G5, G6, MK7, etc.)
-        const geracaoMatch = veiculoBase.match(/\b(G[1-9]|GII|GIII|GIV|GV|GVI|MK\d+|E\d{3})\b/i);
-        const geracao = geracaoMatch ? geracaoMatch[0] : '';
-
-        // Limpa nome da peça (pega as 2-3 primeiras palavras significativas)
-        const pecaLimpa = peca
-            .replace(/\(.*?\)/g, '') // Remove parênteses
-            .replace(/dianteiro|dianteira|traseiro|traseira|completo|completa/gi, (m) => m.toLowerCase())
-            .split(/\s+/)
-            .slice(0, 3)
-            .join(' ')
-            .trim();
-
-        // Limpa nome da marca (remove parênteses, informações extras)
-        function cleanMarca(marca: string): string {
-            return marca.replace(/\s*\(.*?\)\s*/g, '').trim().split(/\s+/).slice(0, 2).join(' ');
-        }
-
-        const enrichedMarcas = (aiAnalysis.top_3_marcas || []).map((m: any) => {
-            const marcaLimpa = cleanMarca(m.marca);
-            
-            // Termo descritivo: [Peça] [Modelo] [Geração/Ano] [Marca]
-            // Ex: "capô saveiro g5 2011" + marca no card
-            const termoBase = `${pecaLimpa} ${modelo} ${geracao} ${ano}`.replace(/\s+/g, ' ').trim();
-            const termoComMarca = `${termoBase} ${marcaLimpa}`.trim();
-
-            return { 
-                ...m, 
-                marca: m.marca, // Mantém nome original para exibição
-                termo_busca_mercadolivre: termoComMarca,
-                // Termo extra: código OEM para busca alternativa
-                termo_codigo_oem: hasValidOem ? oem : null
-            };
-        });
-
         const finalResponse = {
             query: query || "Busca por Imagem",
             dados_tecnicos: {
                 identificacao_tecnica: aiAnalysis.identificacao_tecnica,
                 intercambiabilidade: aiAnalysis.intercambiabilidade,
-                top_3_marcas: enrichedMarcas,
+                top_3_marcas: aiAnalysis.top_3_marcas,
                 referencia_aliexpress: aiAnalysis.referencia_aliexpress
             },
             ml_results: []
