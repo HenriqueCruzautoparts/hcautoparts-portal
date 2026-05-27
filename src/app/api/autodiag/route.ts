@@ -8,7 +8,7 @@ async function getAutodiagAnalysis(
   problema: string,
   dtcs: string[],
   liveData: string,
-  image?: string
+  attachments?: {type: 'image'|'pdf'; base64: string}[]
 ): Promise<string> {
   const apiKey = (process.env.GEMINI_API_KEY || "").trim();
 
@@ -21,93 +21,85 @@ async function getAutodiagAnalysis(
 
   const dtcsList = dtcs.length > 0 ? dtcs.join(", ") : "Nenhum código informado";
   const liveDataSection = liveData?.trim()
-    ? `\n**DADOS DO SCANNER (Live Data fornecido pelo técnico):**\n${liveData}`
+    ? `\n**DADOS DO SCANNER (Live Data):**\n${liveData}`
     : "";
 
+  const hasImages = attachments?.some(a => a.type === 'image') ?? false;
+  const hasPdfs = attachments?.some(a => a.type === 'pdf') ?? false;
+  const hasAttachments = attachments && attachments.length > 0;
+
   const prompt = `
-Você é um Especialista Sênior em Diagnóstico Automotivo e Engenharia Mecânica. 
-Sua função é atuar como parceiro técnico avançado para oficinas mecânicas profissionais.
-Você possui conhecimento profundo em injeção eletrônica, redes CAN, sistemas mecânicos (motor/câmbio), e protocolos de comunicação (OBDII e proprietários como VAG, Ford, Toyota).
+Você é um Especialista Sênior em Diagnóstico Automotivo. Atua como parceiro técnico para oficinas profissionais.
+Conhecimento: injeção eletrônica, redes CAN, sistemas mecânicos, OBDII e protocolos proprietários (VAG, Ford, Toyota).
 
 **VEÍCULO:** ${veiculo || "Não especificado"}
-**DESCRIÇÃO DO PROBLEMA:** ${problema}
-**CÓDIGOS DE FALHA (DTCs):** ${dtcsList}
+**PROBLEMA:** ${problema || "Não descrito"}
+**DTCs:** ${dtcsList}
 ${liveDataSection}
-${image ? "**IMAGEM:** O técnico enviou uma foto para análise visual." : ""}
+${hasAttachments ? `**ARQUIVOS ANEXADOS:** ${attachments!.length} arquivo(s) (${attachments!.map(a => a.type === 'pdf' ? 'PDF' : 'Imagem').join(', ')}) — Analise todos.` : ""}
 
-Analise toda a informação acima e responda OBRIGATORIAMENTE usando EXATAMENTE este formato de resposta em Markdown:
+Resposta OBRIGATÓRIA: seja CONCISO e DIRETO. Máximo 120 palavras por seção. Use bullet points. Sem texto genérico ou introduções desnecessárias.
+
+Use EXATAMENTE este formato Markdown:
 
 ---
 
-## 📋 RESUMO DO PROBLEMA
-
-(Breve descrição técnica do que foi apresentado — máximo 3 linhas)
+## 📋 RESUMO (máx. 3 linhas)
+(Contexto técnico do problema apresentado)
 
 ---
 
 ## 🔍 ANÁLISE TÉCNICA
-
-${dtcs.length > 0 ? `### Análise dos Códigos de Falha (DTCs)
-Para cada DTC informado, explique:
-- **[CÓDIGO]** — Significado técnico completo + condição exata de disparo (o que a ECU precisa ver para gravar o erro) + classificação (Atual/Pendente/Histórico típico) + se é falha primária ou sintomática
-
-Se houver múltiplos códigos, identifique a falha raiz e as falhas consequentes.` : ""}
-
-${liveData ? `### Análise de Coerência dos Dados (Live Data)
-Analise cada parâmetro fornecido verificando a plausibilidade física e coerência entre eles.
-Destaque qualquer valor suspeito ou fora de especificação.` : ""}
-
-${image ? `### Análise Visual
-Identifique desgastes, vazamentos, carbonização, rupturas ou montagens incorretas visíveis na imagem.` : ""}
+${dtcs.length > 0 ? `### Códigos de Falha (DTCs)
+- **[CÓDIGO]** — Significado + condição de disparo + primário ou sintomático` : ""}
+${liveData ? `### Live Data
+- Analise cada parâmetro. Destaque valores suspeitos com **negrito**.` : ""}
+${hasImages ? `### Análise Visual
+- Liste desgastes, vazamentos, carbonização, fraturas ou montagem incorreta vistos nas imagens.` : ""}
+${hasPdfs ? `### Relatório PDF
+- Extraia os dados relevantes do PDF e analise tecnicamente.` : ""}
 
 ---
 
-## 🧠 HIPÓTESES DIAGNÓSTICAS
-
-Liste em ordem de probabilidade (da mais provável para menos provável), com justificativa técnica para cada uma:
-
-1. **[Causa mais provável]** — justificativa técnica detalhada
-2. **[Segunda hipótese]** — justificativa técnica
-3. **[Terceira hipótese]** — justificativa técnica (se aplicável)
+## 🧠 HIPÓTESES (ordem decrescente de probabilidade)
+1. **[Causa mais provável]** — justificativa técnica objetiva
+2. **[Segunda hipótese]** — justificativa técnica objetiva
+3. **[Terceira hipótese]** — se aplicável
 
 ---
 
-## 🛠️ ROTEIRO DE TESTES SUGERIDO
-
-Liste os testes em ordem lógica de execução (do mais simples/barato ao mais complexo):
-
-1. **Teste 1** — [O que testar, como testar, quais valores esperar]
-2. **Teste 2** — [O que testar, como testar, quais valores esperar]
-3. **Teste 3** — [O que testar, como testar, quais valores esperar]
-(adicione mais testes se necessário)
+## 🛠️ ROTEIRO DE TESTES (mais simples primeiro)
+1. **[Teste 1]** — O que testar + como + valor esperado
+2. **[Teste 2]** — O que testar + como + valor esperado
+3. **[Teste 3]** — O que testar + como + valor esperado
 
 ---
 
 ## ⚠️ NOTA TÉCNICA
-
-Inclua aqui:
-- Problemas crônicos conhecidos neste modelo/motor (TSBs, recalls, falhas de projeto)
-- Particularidades do sistema que o técnico deve conhecer antes de iniciar
-- Avisos sobre peças que NÃO devem ser trocadas sem diagnóstico comprovado
+- Problemas crônicos conhecidos neste modelo
+- Alertas sobre peças que NÃO devem ser trocadas sem diagnóstico comprovado
 - Ferramentas específicas necessárias (se houver)
 
 ---
 
-Responda em Português do Brasil. Seja direto e técnico. Não use linguagem genérica ou respostas vagas.
+Responda em Português do Brasil.
   `;
 
-  let contents: any[];
-  if (image) {
-    const rawBase64 = image.split(",")[1] || image;
-    contents = [{
-      parts: [
-        { text: prompt },
-        { inline_data: { mime_type: "image/jpeg", data: rawBase64 } }
-      ]
-    }];
-  } else {
-    contents = [{ parts: [{ text: prompt }] }];
+  // Monta as parts: texto do prompt + todos os arquivos (imagens e PDFs)
+  const parts: any[] = [{ text: prompt }];
+
+  if (attachments && attachments.length > 0) {
+    for (const att of attachments) {
+      const rawBase64 = att.base64.split(',')[1] || att.base64;
+      if (att.type === 'image') {
+        parts.push({ inline_data: { mime_type: 'image/jpeg', data: rawBase64 } });
+      } else if (att.type === 'pdf') {
+        parts.push({ inline_data: { mime_type: 'application/pdf', data: rawBase64 } });
+      }
+    }
   }
+
+  const contents = [{ parts }];
 
   const MAX_RETRIES = 3;
   let lastError: Error | null = null;
@@ -168,9 +160,17 @@ export async function POST(req: Request) {
   try {
     const payload = await req.json();
     requestContext = payload;
-    const { veiculo, problema, dtcs, liveData, image, user_id, user_email, anon_fingerprint } = payload;
+    const { veiculo, problema, dtcs, liveData, attachments, image, user_id, user_email, anon_fingerprint } = payload;
 
-    if (!problema?.trim() && !image) {
+    // Compatibilidade retroativa: suporta campo `image` (antigo) e novo `attachments`
+    const finalAttachments: {type: 'image'|'pdf'; base64: string}[] = [];
+    if (Array.isArray(attachments) && attachments.length > 0) {
+      finalAttachments.push(...attachments);
+    } else if (image) {
+      finalAttachments.push({ type: 'image', base64: image });
+    }
+
+    if (!problema?.trim() && finalAttachments.length === 0) {
       return NextResponse.json(
         { error: "Descreva o problema ou envie uma imagem para o diagnóstico." },
         { status: 400 }
@@ -228,7 +228,7 @@ export async function POST(req: Request) {
       problema || "",
       dtcs || [],
       liveData || "",
-      image
+      finalAttachments.length > 0 ? finalAttachments : undefined
     );
 
     // Salva no histórico se usuário logado
