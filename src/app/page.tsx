@@ -649,7 +649,7 @@ export default function Home() {
               AutoParts AI
             </span>
             <span className="ml-2 text-[9px] sm:text-[10px] font-bold text-[#FF2D55] bg-[#FF2D55]/10 border border-[#FF2D55]/30 px-1.5 sm:py-0.5 rounded-full uppercase tracking-wider">
-              1.1
+              1.5
             </span>
           </div>
           <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold tracking-tight text-white pb-1 px-2">
