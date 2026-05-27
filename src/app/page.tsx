@@ -1,20 +1,22 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Search, LayoutDashboard, Activity, CheckCircle2, ImagePlus, Camera, X, LogIn, LogOut, User, Headset, Zap, Settings2, ChevronDown, Package, Loader2, Ticket, Tag, Copy } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { Search, LayoutDashboard, Activity, CheckCircle2, ImagePlus, Camera, X, LogIn, LogOut, User, Headset, Zap, Settings2, ChevronDown, Package, Loader2, Ticket, Tag, Copy, AlertTriangle, Stethoscope, ShoppingBag, Plus, Trash2 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { SearchHistory } from '@/components/SearchHistory';
 import { WelcomeModal } from '@/components/WelcomeModal';
 import { DashboardWelcomeModal } from '@/components/DashboardWelcomeModal';
 import { CompleteProfileModal } from '@/components/CompleteProfileModal';
+import { ErrorMonitor } from '@/components/ErrorMonitor';
+import { CouponCard } from '@/components/CouponCard';
 import { supabase } from '@/lib/supabase';
 import Link from 'next/link';
 import Image from 'next/image';
 import { vehicleData } from '@/data/vehicles';
 
 // ---- UTILITÁRIO: Constrói link do Mercado Livre Brasil ----
-const ML_AFFILIATE = 'matt_word=henrique_cruzn&matt_tool=81389334&forceInApp=true&ref=BFOG';
+const ML_AFFILIATE = 'matt_word=henriquecruzn&matt_tool=81389334&forceInApp=true&ref=BFOG';
 function buildMlLink(searchTerm: string): string {
   if (!searchTerm || searchTerm.trim().length === 0) return '#';
   const cleaned = searchTerm.trim().toLowerCase()
@@ -24,6 +26,15 @@ function buildMlLink(searchTerm: string): string {
     .replace(/-{2,}/g, '-') // Colapsa hifens duplicados
     .replace(/^-|-$/g, ''); // Remove hifens nas pontas
   return `https://lista.mercadolivre.com.br/${cleaned}?${ML_AFFILIATE}`;
+}
+
+// ---- UTILITÁRIO: Constrói link da Shopee Brasil com afiliado ----
+// TODO: Substitua SHOPEE_AFFILIATE_ID pelo seu ID real de afiliado da Shopee
+const SHOPEE_AFFILIATE_ID = 'SEU_ID_AFILIADO_AQUI';
+function buildShopeeLink(searchTerm: string): string {
+  if (!searchTerm || searchTerm.trim().length === 0) return '#';
+  const encoded = encodeURIComponent(searchTerm.trim());
+  return `https://shopee.com.br/search?keyword=${encoded}&smtt=0&smtt_id=${SHOPEE_AFFILIATE_ID}`;
 }
 
 export default function Home() {
@@ -36,7 +47,7 @@ export default function Home() {
   const [user, setUser] = useState<any | null>(null);
   const [profile, setProfile] = useState<any | null>(null);
   const [anonFingerprint, setAnonFingerprint] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'smart' | 'guided' | 'coupons'>('smart');
+  const [activeTab, setActiveTab] = useState<'smart' | 'guided' | 'coupons' | 'autodiag'>('smart');
   const [showCompleteProfile, setShowCompleteProfile] = useState(false);
   const [guidedForm, setGuidedForm] = useState({
     montadora: '',
@@ -48,6 +59,23 @@ export default function Home() {
   const [abortController, setAbortController] = useState<AbortController | null>(null);
   const [cuponsData, setCuponsData] = useState<any[]>([]);
   const [loadingCupons, setLoadingCupons] = useState(false);
+
+  // ---- Estados do AutoDiag ----
+  const [autodiagForm, setAutodiagForm] = useState({
+    montadora: '',
+    modelo: '',
+    ano: '',
+    motor: '',
+    problema: '',
+    liveData: '',
+  });
+  const [autodiagDtcs, setAutodiagDtcs] = useState<string[]>([]);
+  const [autodiagDtcInput, setAutodiagDtcInput] = useState('');
+  const [autodiagImage, setAutodiagImage] = useState<string | null>(null);
+  const [autodiagImagePreview, setAutodiagImagePreview] = useState<string | null>(null);
+  const [autodiagLoading, setAutodiagLoading] = useState(false);
+  const [autodiagResult, setAutodiagResult] = useState<string | null>(null);
+  const [autodiagError, setAutodiagError] = useState<string | null>(null);
 
   const handleCancelSearch = () => {
     if (abortController) {
@@ -90,49 +118,105 @@ export default function Home() {
     const buffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(raw));
     return Array.from(new Uint8Array(buffer)).map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 32);
   };
-  useEffect(() => {
-    // Fetch cupons when component mounts
-    const fetchCupons = async () => {
-      setLoadingCupons(true);
-      try {
-        const today = new Date().toISOString().split('T')[0];
-        const { data, error } = await supabase
-          .from('cupons')
-          .select('*')
-          .eq('ativo', true)
-          .gte('data_validade', today)
-          .order('ordem', { ascending: true });
-        
-        if (!error && data && data.length > 0) {
-          // Shuffle para aparecerem variados
-          const shuffled = [...data].sort(() => Math.random() - 0.5);
-          setCuponsData(shuffled);
-        } else {
-          // Fallback if table doesn't exist or is empty
-          const fallback = [
-            { titulo: "Mercado Livre - Auto", descricao: "10% OFF em Autopeças Acima de R$200", codigo: "AUTO10", link: buildMlLink("acessorios para veiculos") },
-            { titulo: "Freios e Suspensão", descricao: "Frete Grátis + 5% Extra em Pastilhas", codigo: "FREIOS5", link: buildMlLink("pastilha de freio") },
-            { titulo: "Óleo e Filtros", descricao: "Kits de Revisão com 15% OFF (Via App)", codigo: "REVISAO15", link: buildMlLink("kit revisao oleo") },
-            { titulo: "Acessórios Internos", descricao: "R$30 de Desconto na primeira compra", codigo: "BEMVINDO30", link: buildMlLink("acessorios carros") },
-            { titulo: "Pneus Diversos", descricao: "Frete Grátis em Pneus aros 14 a 17", codigo: "PNEUSFREE", link: buildMlLink("pneu automotivo") },
-            { titulo: "Baterias Moura/Heliar", descricao: "5% de volta comprando a base de troca", codigo: "BATERIA5", link: buildMlLink("bateria de carro") }
-          ];
-          setCuponsData(fallback.sort(() => Math.random() - 0.5));
-        }
-      } catch (err) {
-        // Fallback
-        const fallback = [
-          { titulo: "Mercado Livre - Auto", descricao: "10% OFF em Autopeças Acima de R$200", codigo: "AUTO10", link: buildMlLink("acessorios para veiculos") },
-          { titulo: "Freios e Suspensão", descricao: "Frete Grátis + 5% Extra em Pastilhas", codigo: "FREIOS5", link: buildMlLink("pastilha de freio") },
-          { titulo: "Óleo e Filtros", descricao: "Kits de Revisão com 15% OFF (Via App)", codigo: "REVISAO15", link: buildMlLink("kit revisao oleo") },
-          { titulo: "Acessórios Internos", descricao: "R$30 de Desconto na primeira compra", codigo: "BEMVINDO30", link: buildMlLink("acessorios carros") }
-        ];
-        setCuponsData(fallback.sort(() => Math.random() - 0.5));
-      } finally {
-        setLoadingCupons(false);
+  // Função de busca de cupons reutilizável (para re-validação periódica)
+  const fetchCupons = useCallback(async () => {
+    setLoadingCupons(true);
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      const { data, error } = await supabase
+        .from('cupons')
+        .select('*')
+        .eq('ativo', true)
+        .gte('data_validade', today)
+        .order('ordem', { ascending: true });
+
+      if (error) {
+        // Log do erro silenciosamente
+        fetch('/api/logger', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            error_message: `Falha ao buscar cupons: ${error.message}`,
+            context: { origin: 'frontend_fetch_cupons', code: error.code }
+          })
+        }).catch(() => { });
+        setCuponsData([]);
+        return;
       }
-    };
+
+      if (data && data.length > 0) {
+        // Filtro client-side de segurança — dupla validação de data
+        const validCupons = data.filter(c => {
+          if (!c.data_validade) return true; // sem data = sempre válido
+          const expiry = new Date(c.data_validade + 'T23:59:59');
+          return expiry >= new Date();
+        });
+        // Shuffle para variedade
+        const shuffled = [...validCupons].sort(() => Math.random() - 0.5);
+        setCuponsData(shuffled);
+      } else {
+        // Sem cupons válidos — NÃO usar fallback estático
+        setCuponsData([]);
+      }
+    } catch (err: any) {
+      // Log do erro silenciosamente
+      fetch('/api/logger', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          error_message: `Exceção ao buscar cupons: ${err.message}`,
+          context: { origin: 'frontend_fetch_cupons_exception' }
+        })
+      }).catch(() => { });
+      setCuponsData([]);
+    } finally {
+      setLoadingCupons(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    // Buscar cupons imediatamente
     fetchCupons();
+
+    // Re-validar cupons a cada 5 minutos para garantir que expirados saiam
+    const cuponsInterval = setInterval(fetchCupons, 5 * 60 * 1000);
+
+    // Interceptor global de erros não tratados — monitora TODO o sistema
+    const handleGlobalError = (event: ErrorEvent) => {
+      fetch('/api/logger', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          error_message: event.message,
+          context: {
+            origin: 'global_error_handler',
+            filename: event.filename,
+            lineno: event.lineno,
+            colno: event.colno,
+            stack: event.error?.stack?.substring(0, 500)
+          },
+          user_id: user?.id
+        })
+      }).catch(() => { });
+    };
+
+    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+      fetch('/api/logger', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          error_message: `Unhandled Promise Rejection: ${event.reason?.message || event.reason}`,
+          context: {
+            origin: 'unhandled_promise_rejection',
+            stack: event.reason?.stack?.substring(0, 500)
+          },
+          user_id: user?.id
+        })
+      }).catch(() => { });
+    };
+
+    window.addEventListener('error', handleGlobalError);
+    window.addEventListener('unhandledrejection', handleUnhandledRejection);
 
     const fetchProfile = async (userId: string) => {
       const { data } = await supabase.from('profiles').select('full_name').eq('id', userId).single();
@@ -176,8 +260,13 @@ export default function Home() {
       }
     });
 
-    return () => subscription.unsubscribe();
-  }, []);
+    return () => {
+      subscription.unsubscribe();
+      clearInterval(cuponsInterval);
+      window.removeEventListener('error', handleGlobalError);
+      window.removeEventListener('unhandledrejection', handleUnhandledRejection);
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -402,6 +491,96 @@ export default function Home() {
     }
   };
 
+  // ---- Handlers do AutoDiag ----
+  const handleAutodiagImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) return;
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      try {
+        const img = new window.Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let { width, height } = img;
+          const MAX = 1000;
+          if (width > height) { if (width > MAX) { height = Math.round(height * MAX / width); width = MAX; } }
+          else { if (height > MAX) { width = Math.round(width * MAX / height); height = MAX; } }
+          canvas.width = width; canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) return;
+          ctx.drawImage(img, 0, 0, width, height);
+          const compressed = canvas.toDataURL('image/jpeg', 0.7);
+          setAutodiagImage(compressed);
+          setAutodiagImagePreview(compressed);
+        };
+        img.src = reader.result as string;
+      } catch (_) {}
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleAutodiagAddDtc = () => {
+    const dtc = autodiagDtcInput.trim().toUpperCase();
+    if (!dtc || autodiagDtcs.includes(dtc)) return;
+    setAutodiagDtcs(prev => [...prev, dtc]);
+    setAutodiagDtcInput('');
+  };
+
+  const handleAutodiagSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!autodiagForm.problema.trim() && !autodiagImage) {
+      setAutodiagError('Descreva o problema ou envie uma imagem para iniciar o diagnóstico.');
+      return;
+    }
+    if (!user) {
+      const anonSearches = parseInt(localStorage.getItem('autoparts_anon_searches') || '0', 10);
+      if (anonSearches >= 5) {
+        setAutodiagError('Você já utilizou suas 5 consultas gratuitas. Crie sua conta para continuar!');
+        return;
+      }
+    }
+    setAutodiagLoading(true);
+    setAutodiagError(null);
+    setAutodiagResult(null);
+    try {
+      const payload: any = {
+        veiculo: {
+          montadora: autodiagForm.montadora,
+          modelo: autodiagForm.modelo,
+          ano: autodiagForm.ano,
+          motor: autodiagForm.motor,
+        },
+        problema: autodiagForm.problema,
+        dtcs: autodiagDtcs,
+        liveData: autodiagForm.liveData,
+        user_id: user?.id || null,
+        user_email: user?.email || null,
+        anon_fingerprint: !user ? (anonFingerprint || null) : null,
+      };
+      if (autodiagImage) payload.image = autodiagImage;
+      const res = await fetch('/api/autodiag', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        if (data.require_signup) localStorage.setItem('autoparts_anon_searches', '5');
+        throw new Error(data.error || 'Erro ao processar o diagnóstico.');
+      }
+      if (!user) {
+        const c = parseInt(localStorage.getItem('autoparts_anon_searches') || '0', 10);
+        localStorage.setItem('autoparts_anon_searches', (c + 1).toString());
+      }
+      setAutodiagResult(data.analise);
+    } catch (err: any) {
+      setAutodiagError(err.message);
+    } finally {
+      setAutodiagLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-black text-white font-sans selection:bg-[#FF2D55]/30">
       <main className="relative z-10 container mx-auto px-4 sm:px-6 py-8 md:py-12 max-w-5xl">
@@ -507,6 +686,13 @@ export default function Home() {
             >
               <Ticket className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
               Cupons
+            </button>
+            <button
+              onClick={() => setActiveTab('autodiag')}
+              className={`flex items-center justify-center flex-1 sm:flex-none px-4 sm:px-6 py-2 sm:py-2.5 rounded-xl sm:rounded-full text-[13px] sm:text-[15px] font-medium transition-all duration-300 whitespace-nowrap ${activeTab === 'autodiag' ? 'bg-[#30D158]/10 text-[#30D158] shadow-sm border border-[#30D158]/20' : 'text-[#8E8E93] hover:text-[#30D158]'}`}
+            >
+              <Stethoscope className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
+              AutoDiag
             </button>
           </div>
 
@@ -694,56 +880,209 @@ export default function Home() {
                   <div className="flex justify-center col-span-1 sm:col-span-2 py-8">
                     <Loader2 className="w-8 h-8 text-[#32ADE6] animate-spin" />
                   </div>
+                ) : cuponsData.length === 0 ? (
+                  <div className="col-span-1 sm:col-span-2 flex flex-col items-center justify-center py-12 text-center">
+                    <div className="w-16 h-16 rounded-2xl bg-[#32ADE6]/10 flex items-center justify-center mb-4">
+                      <AlertTriangle className="w-8 h-8 text-[#8E8E93]" />
+                    </div>
+                    <h3 className="text-white font-bold text-lg mb-2">Nenhum cupom disponível</h3>
+                    <p className="text-[#8E8E93] text-sm max-w-sm">
+                      No momento não há cupons válidos. Volte em breve para novas ofertas exclusivas!
+                    </p>
+                  </div>
                 ) : (
                   cuponsData.map((coupon, i) => (
-                    <div key={i} className="flex flex-col bg-[#2C2C2E]/60 border border-dashed border-[#32ADE6]/40 rounded-2xl p-5 hover:border-[#32ADE6] transition-colors group relative overflow-hidden">
-                      <div className="absolute top-0 right-0 bg-[#32ADE6]/10 text-[#32ADE6] text-[10px] font-bold px-2.5 py-1 rounded-bl-xl uppercase tracking-widest border-b border-l border-[#32ADE6]/20">
-                        Verificado Hoje
-                      </div>
-                      <div className="flex items-center gap-3 mb-2">
-                        <div className="w-10 h-10 rounded-full bg-[#32ADE6]/10 flex items-center justify-center shrink-0">
-                          <Tag className="w-5 h-5 text-[#32ADE6]" />
-                        </div>
-                        <div>
-                          <h3 className="text-white font-bold text-[15px]">{coupon.titulo || coupon.title}</h3>
-                          <p className="text-[#8E8E93] text-[12px] mt-0.5">{coupon.descricao || coupon.desc}</p>
-                        </div>
-                      </div>
-                      
-                      <div className="mt-auto pt-4 flex items-center gap-2">
-                        <div className="flex-1 bg-black/40 border border-white/10 rounded-xl px-3 py-2 flex items-center justify-between group-hover:border-[#32ADE6]/30 transition-colors">
-                          <span className="font-mono text-[#32ADE6] font-bold tracking-wider text-[14px]">{coupon.codigo || coupon.code}</span>
-                          <button 
-                            className="text-[#8E8E93] hover:text-white transition-colors" 
-                            title="Copiar cupom"
-                            onClick={(e) => {
-                              e.preventDefault();
-                              navigator.clipboard.writeText(coupon.codigo || coupon.code);
-                            }}
-                          >
-                            <Copy className="w-4 h-4" />
-                          </button>
-                        </div>
-                        <a 
-                          href={coupon.link} 
-                          target="_blank" 
-                          rel="noreferrer"
-                          className="bg-[#32ADE6] hover:bg-[#2892C6] text-white p-2.5 rounded-xl transition-colors shrink-0"
-                          title="Usar cupom"
-                        >
-                          <Zap className="w-4 h-4" />
-                        </a>
-                      </div>
-                    </div>
+                    <CouponCard key={coupon.id || i} coupon={coupon} index={i} />
                   ))
                 )}
               </div>
+            </div>
+          ) : activeTab === 'autodiag' ? (
+            <div className="w-full bg-[#1C1C1E]/70 backdrop-blur-2xl border border-white/10 rounded-[32px] shadow-[0_8px_30px_rgb(48,209,88,0.05)] transition-all duration-300 animate-in fade-in zoom-in-95 overflow-hidden">
+              {/* Header */}
+              <div className="p-6 border-b border-white/10 flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-[#30D158]/10 border border-[#30D158]/20 flex items-center justify-center shrink-0">
+                  <Stethoscope className="w-5 h-5 text-[#30D158]" />
+                </div>
+                <div>
+                  <h2 className="text-[18px] font-bold text-white tracking-tight">AutoDiag IA</h2>
+                  <p className="text-[#8E8E93] text-[12px]">Diagnóstico automotivo com Especialista IA Sênior</p>
+                </div>
+              </div>
+
+              {autodiagResult ? (
+                /* Resultado do Diagnóstico */
+                <div className="p-6">
+                  <button
+                    onClick={() => { setAutodiagResult(null); setAutodiagError(null); }}
+                    className="flex items-center px-4 py-2 mb-6 bg-white/5 border border-white/10 hover:bg-white/10 rounded-xl text-white font-medium text-sm transition-all"
+                  >
+                    <Search className="w-4 h-4 mr-2 text-[#8E8E93]" />
+                    Novo Diagnóstico
+                  </button>
+                  <div className="prose prose-invert max-w-none prose-sm md:prose-base text-[#E5E5EA]">
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm]}
+                      components={{
+                        h1: ({ node, ...props }) => <h1 className="text-2xl font-bold text-white mt-6 mb-4" {...props} />,
+                        h2: ({ node, ...props }) => <h2 className="text-[18px] font-bold text-white mt-6 mb-3 flex items-center gap-2 border-b border-white/10 pb-2" {...props} />,
+                        h3: ({ node, ...props }) => <h3 className="text-[15px] font-semibold text-[#30D158] mt-4 mb-2" {...props} />,
+                        p: ({ node, ...props }) => <p className="mb-4 leading-relaxed text-[#E5E5EA]" {...props} />,
+                        ul: ({ node, ...props }) => <ul className="list-disc list-inside mb-4 space-y-1.5" {...props} />,
+                        ol: ({ node, ...props }) => <ol className="list-decimal list-inside mb-4 space-y-2" {...props} />,
+                        li: ({ node, ...props }) => <li className="pl-1 leading-relaxed" {...props} />,
+                        strong: ({ node, ...props }) => <strong className="font-bold text-white" {...props} />,
+                        hr: ({ node, ...props }) => <hr className="border-white/10 my-6" {...props} />,
+                        blockquote: ({ node, ...props }) => <blockquote className="border-l-4 border-[#30D158]/50 pl-4 italic text-[#8E8E93] my-4" {...props} />,
+                      }}
+                    >
+                      {autodiagResult}
+                    </ReactMarkdown>
+                  </div>
+                </div>
+              ) : (
+                /* Formulário de Diagnóstico */
+                <form onSubmit={handleAutodiagSubmit} className="p-6 space-y-5">
+
+                  {/* Veículo */}
+                  <div>
+                    <h3 className="text-[13px] font-bold text-[#8E8E93] uppercase tracking-widest mb-3">1. Identifique o Veículo (Opcional)</h3>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="relative">
+                        <select value={autodiagForm.montadora} onChange={(e) => setAutodiagForm({ ...autodiagForm, montadora: e.target.value, modelo: '', ano: '', motor: '' })} className="w-full bg-[#2C2C2E]/60 border border-white/10 rounded-2xl px-4 py-3 text-white focus:outline-none focus:border-[#30D158]/50 transition-colors appearance-none pr-10 text-[13px]">
+                          <option value="" className="bg-[#1C1C1E] text-[#8E8E93]">Montadora...</option>
+                          {Object.keys(vehicleData).sort().map(b => <option key={b} value={b} className="bg-[#1C1C1E] text-white">{b}</option>)}
+                        </select>
+                        <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8E8E93] pointer-events-none" />
+                      </div>
+                      <div className="relative">
+                        <select value={autodiagForm.modelo} onChange={(e) => setAutodiagForm({ ...autodiagForm, modelo: e.target.value, ano: '', motor: '' })} disabled={!autodiagForm.montadora} className="w-full bg-[#2C2C2E]/60 border border-white/10 rounded-2xl px-4 py-3 text-white focus:outline-none focus:border-[#30D158]/50 transition-colors appearance-none pr-10 text-[13px] disabled:opacity-50">
+                          <option value="" className="bg-[#1C1C1E] text-[#8E8E93]">Modelo...</option>
+                          {autodiagForm.montadora && Object.keys(vehicleData[autodiagForm.montadora] || {}).sort().map(m => <option key={m} value={m} className="bg-[#1C1C1E] text-white">{m}</option>)}
+                        </select>
+                        <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8E8E93] pointer-events-none" />
+                      </div>
+                      <div className="relative">
+                        <select value={autodiagForm.ano} onChange={(e) => setAutodiagForm({ ...autodiagForm, ano: e.target.value, motor: '' })} disabled={!autodiagForm.modelo} className="w-full bg-[#2C2C2E]/60 border border-white/10 rounded-2xl px-4 py-3 text-white focus:outline-none focus:border-[#30D158]/50 transition-colors appearance-none pr-10 text-[13px] disabled:opacity-50">
+                          <option value="" className="bg-[#1C1C1E] text-[#8E8E93]">Ano...</option>
+                          {autodiagForm.montadora && autodiagForm.modelo && Object.keys(vehicleData[autodiagForm.montadora]?.[autodiagForm.modelo] || {}).sort((a, b) => b.localeCompare(a)).map(y => <option key={y} value={y} className="bg-[#1C1C1E] text-white">{y}</option>)}
+                        </select>
+                        <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8E8E93] pointer-events-none" />
+                      </div>
+                      <div className="relative">
+                        <select value={autodiagForm.motor} onChange={(e) => setAutodiagForm({ ...autodiagForm, motor: e.target.value })} disabled={!autodiagForm.ano} className="w-full bg-[#2C2C2E]/60 border border-white/10 rounded-2xl px-4 py-3 text-white focus:outline-none focus:border-[#30D158]/50 transition-colors appearance-none pr-10 text-[13px] disabled:opacity-50">
+                          <option value="" className="bg-[#1C1C1E] text-[#8E8E93]">Motor...</option>
+                          {autodiagForm.montadora && autodiagForm.modelo && autodiagForm.ano && (vehicleData[autodiagForm.montadora]?.[autodiagForm.modelo]?.[autodiagForm.ano] || []).map((eng: string) => <option key={eng} value={eng} className="bg-[#1C1C1E] text-white">{eng}</option>)}
+                        </select>
+                        <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#8E8E93] pointer-events-none" />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Problema */}
+                  <div>
+                    <h3 className="text-[13px] font-bold text-[#8E8E93] uppercase tracking-widest mb-3">2. Descreva o Problema <span className="text-[#FF3B30]">(Obrigatório)</span></h3>
+                    <textarea
+                      value={autodiagForm.problema}
+                      onChange={(e) => setAutodiagForm({ ...autodiagForm, problema: e.target.value })}
+                      placeholder="Ex: Motor falhando em baixa rotatção, luz do motor acesa, consumo elevado, bater em curvas..."
+                      rows={4}
+                      className="w-full bg-[#2C2C2E]/60 border border-white/10 rounded-2xl px-4 py-3.5 text-white placeholder:text-[#8E8E93]/50 focus:outline-none focus:border-[#30D158]/50 transition-colors text-[14px] resize-none leading-relaxed"
+                    />
+                  </div>
+
+                  {/* DTCs */}
+                  <div>
+                    <h3 className="text-[13px] font-bold text-[#8E8E93] uppercase tracking-widest mb-3">3. Códigos de Falha — DTCs (Opcional)</h3>
+                    <div className="flex gap-2 mb-3">
+                      <input
+                        type="text"
+                        value={autodiagDtcInput}
+                        onChange={(e) => setAutodiagDtcInput(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAutodiagAddDtc(); } }}
+                        placeholder="Ex: P0300, P0420, C0034..."
+                        className="flex-1 bg-[#2C2C2E]/60 border border-white/10 rounded-2xl px-4 py-3 text-white placeholder:text-[#8E8E93]/50 focus:outline-none focus:border-[#30D158]/50 transition-colors text-[14px] font-mono uppercase"
+                      />
+                      <button type="button" onClick={handleAutodiagAddDtc} className="bg-[#30D158]/10 hover:bg-[#30D158]/20 border border-[#30D158]/30 text-[#30D158] rounded-2xl px-4 py-3 transition-colors font-bold">
+                        <Plus className="w-4 h-4" />
+                      </button>
+                    </div>
+                    {autodiagDtcs.length > 0 && (
+                      <div className="flex flex-wrap gap-2">
+                        {autodiagDtcs.map(dtc => (
+                          <span key={dtc} className="flex items-center gap-1.5 bg-[#30D158]/10 border border-[#30D158]/30 text-[#30D158] font-mono font-bold text-[13px] px-3 py-1.5 rounded-xl">
+                            {dtc}
+                            <button type="button" onClick={() => setAutodiagDtcs(prev => prev.filter(d => d !== dtc))} className="text-[#30D158]/60 hover:text-[#FF3B30] transition-colors">
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Live Data */}
+                  <div>
+                    <h3 className="text-[13px] font-bold text-[#8E8E93] uppercase tracking-widest mb-3">4. Dados do Scanner / Live Data (Opcional)</h3>
+                    <textarea
+                      value={autodiagForm.liveData}
+                      onChange={(e) => setAutodiagForm({ ...autodiagForm, liveData: e.target.value })}
+                      placeholder="Cole aqui os dados do scanner: MAP 45kPa, TPS 0.5V, Lambda 0.98, STFT +8%..."
+                      rows={3}
+                      className="w-full bg-[#2C2C2E]/60 border border-white/10 rounded-2xl px-4 py-3.5 text-white placeholder:text-[#8E8E93]/50 focus:outline-none focus:border-[#30D158]/50 transition-colors text-[13px] font-mono resize-none"
+                    />
+                  </div>
+
+                  {/* Imagem */}
+                  <div>
+                    <h3 className="text-[13px] font-bold text-[#8E8E93] uppercase tracking-widest mb-3">5. Foto da Peça / Tela do Scanner (Opcional)</h3>
+                    {autodiagImagePreview ? (
+                      <div className="relative inline-block">
+                        <img src={autodiagImagePreview} alt="Preview" className="h-24 w-24 object-cover rounded-2xl border border-white/10" />
+                        <button type="button" onClick={() => { setAutodiagImage(null); setAutodiagImagePreview(null); }} className="absolute -top-2 -right-2 bg-[#2C2C2E] hover:bg-[#FF3B30]/20 border border-white/10 text-gray-200 rounded-full p-1.5 shadow-sm transition-all">
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ) : (
+                      <label className="flex items-center gap-3 cursor-pointer bg-[#2C2C2E]/40 border border-dashed border-white/20 hover:border-[#30D158]/40 rounded-2xl px-4 py-4 transition-colors group w-full">
+                        <input type="file" accept="image/*" className="hidden" onChange={handleAutodiagImageUpload} />
+                        <ImagePlus className="w-5 h-5 text-[#8E8E93] group-hover:text-[#30D158] transition-colors" />
+                        <span className="text-[#8E8E93] group-hover:text-white text-[13px] transition-colors">Foto da peça, tela do scanner ou gráfico do osciloscópio</span>
+                      </label>
+                    )}
+                  </div>
+
+                  {/* Erro */}
+                  {autodiagError && (
+                    <div className="p-4 rounded-2xl bg-[#FF3B30]/10 border border-[#FF3B30]/20 flex items-start gap-3">
+                      <AlertTriangle className="w-5 h-5 text-[#FF3B30] shrink-0 mt-0.5" />
+                      <p className="text-[#FF3B30] text-[14px]">{autodiagError}</p>
+                    </div>
+                  )}
+
+                  {/* Botão */}
+                  <button
+                    type="submit"
+                    disabled={autodiagLoading}
+                    className="w-full bg-gradient-to-r from-[#30D158] to-[#25A244] hover:from-[#25A244] hover:to-[#30D158] text-white rounded-2xl px-6 py-4 font-bold text-[16px] transition-all duration-300 transform active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-[0_4px_14px_0_rgba(48,209,88,0.35)] relative overflow-hidden group"
+                  >
+                    {autodiagLoading ? (
+                      <><Loader2 className="w-5 h-5 animate-spin" /><span>Analisando com IA Sênior...</span></>
+                    ) : (
+                      <><Stethoscope className="w-5 h-5" /><span>Iniciar Diagnóstico</span></>
+                    )}
+                    {!autodiagLoading && (
+                      <div className="absolute inset-0 h-full w-full opacity-0 group-hover:opacity-20 bg-gradient-to-r from-transparent via-white to-transparent -translate-x-full group-hover:animate-shimmer" />
+                    )}
+                  </button>
+                </form>
+              )}
             </div>
           ) : null}
         </div>
 
         {/* Search History */}
-        {!result && !loading && activeTab !== 'coupons' && (
+        {!result && !loading && activeTab !== 'coupons' && activeTab !== 'autodiag' && (
           <SearchHistory userId={user?.id ?? null} onSelect={handleHistorySelect} />
         )}
 
@@ -1021,6 +1360,43 @@ export default function Home() {
                     </div>
                   )}
 
+                  {/* Busca Shopee — 3 campos de busca com afiliado */}
+                  {result.dados_tecnicos.top_3_marcas && result.dados_tecnicos.top_3_marcas.length > 0 && (
+                    <div className="mt-6">
+                      <h3 className="text-lg sm:text-xl font-bold text-white mb-3 sm:mb-4 border-b border-white/10 pb-2 flex items-center gap-2">
+                        <ShoppingBag className="w-5 h-5 text-[#EE4D2D]" />
+                        Buscar na Shopee
+                      </h3>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        {result.dados_tecnicos.top_3_marcas.slice(0, 3).map((marcaItem: any, idx: number) => {
+                          const termo = (marcaItem.termo_busca_mercadolivre || '').trim();
+                          const shopeeLink = buildShopeeLink(termo);
+                          const isBest = idx === 0;
+                          return (
+                            <a
+                              key={`shopee-${idx}`}
+                              href={shopeeLink}
+                              target="_blank"
+                              rel="noreferrer"
+                              className={`flex flex-col items-center justify-center p-4 rounded-2xl border transition-all duration-300 hover:scale-[1.02] group ${
+                                isBest
+                                  ? 'bg-gradient-to-b from-[#EE4D2D]/20 to-[#EE4D2D]/5 border-[#EE4D2D]/40 shadow-[0_4px_15px_rgba(238,77,45,0.15)]'
+                                  : 'bg-[#2C2C2E]/50 border-white/10 hover:border-[#EE4D2D]/30'
+                              }`}
+                            >
+                              <ShoppingBag className={`w-5 h-5 mb-2 ${isBest ? 'text-[#EE4D2D]' : 'text-[#8E8E93] group-hover:text-[#EE4D2D]'} transition-colors`} />
+                              <span className={`text-[12px] font-bold mb-1 text-center ${isBest ? 'text-[#EE4D2D]' : 'text-white'}`}>
+                                {marcaItem.marca}
+                              </span>
+                              <span className="text-[10px] text-[#8E8E93] text-center line-clamp-2">{termo}</span>
+                              <span className="mt-2 text-[10px] font-bold text-[#EE4D2D]/80 uppercase tracking-wider">Ver na Shopee →</span>
+                            </a>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
                 </div>
               ) : (
                 <div className="prose prose-invert max-w-none prose-sm md:prose-base text-[#E5E5EA]">
@@ -1067,6 +1443,8 @@ export default function Home() {
             supabase.auth.refreshSession();
           }}
         />
+        {/* Error Monitor — visível apenas para admin */}
+        <ErrorMonitor userEmail={user?.email} />
       </main>
 
       <style dangerouslySetInnerHTML={{
