@@ -10,6 +10,7 @@ import { DashboardWelcomeModal } from '@/components/DashboardWelcomeModal';
 import { CompleteProfileModal } from '@/components/CompleteProfileModal';
 import { ErrorMonitor } from '@/components/ErrorMonitor';
 import { CouponCard } from '@/components/CouponCard';
+import { OfertaCard } from '@/components/OfertaCard';
 import { supabase } from '@/lib/supabase';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -29,8 +30,8 @@ function buildMlLink(searchTerm: string): string {
 }
 
 // ---- UTILITÁRIO: Constrói link da Shopee Brasil com afiliado ----
-// TODO: Substitua SHOPEE_AFFILIATE_ID pelo seu ID real de afiliado da Shopee
-const SHOPEE_AFFILIATE_ID = 'SEU_ID_AFILIADO_AQUI';
+// TODO: Configure NEXT_PUBLIC_SHOPEE_AFFILIATE_ID no painel de variáveis de ambiente
+const SHOPEE_AFFILIATE_ID = process.env.NEXT_PUBLIC_SHOPEE_AFFILIATE_ID || '';
 function buildShopeeLink(searchTerm: string): string {
   if (!searchTerm || searchTerm.trim().length === 0) return '#';
   const encoded = encodeURIComponent(searchTerm.trim());
@@ -59,6 +60,12 @@ export default function Home() {
   const [abortController, setAbortController] = useState<AbortController | null>(null);
   const [cuponsData, setCuponsData] = useState<any[]>([]);
   const [loadingCupons, setLoadingCupons] = useState(false);
+  const [ofertasData, setOfertasData] = useState<any[]>([]);
+  const [loadingOfertas, setLoadingOfertas] = useState(false);
+  const [ofertasError, setOfertasError] = useState<string | null>(null);
+  const [mlDisponivel, setMlDisponivel] = useState<boolean | null>(null);
+  const [systemOverloaded, setSystemOverloaded] = useState(false); // banner de sistema sobrecarregado
+  const [anonSearchesLeft, setAnonSearchesLeft] = useState<number | null>(null); // pesquisas restantes anônimo
 
   // ---- Estados do AutoDiag ----
   const [autodiagForm, setAutodiagForm] = useState({
@@ -173,9 +180,35 @@ export default function Home() {
     }
   }, []);
 
+  // Busca ofertas reais do ML via /api/ofertas (somente dados validados)
+  const fetchOfertas = useCallback(async () => {
+    setLoadingOfertas(true);
+    setOfertasError(null);
+    setMlDisponivel(null);
+    try {
+      const res = await fetch('/api/ofertas');
+      const data = await res.json();
+      if (!res.ok) {
+        setOfertasError(data.error || 'Erro ao carregar ofertas.');
+        setOfertasData([]);
+        setMlDisponivel(false);
+      } else {
+        setMlDisponivel(data.ml_disponivel ?? true);
+        setOfertasData(data.ofertas || []);
+      }
+    } catch (err: any) {
+      setOfertasError('Falha de conexão. Verifique sua internet e tente novamente.');
+      setOfertasData([]);
+      setMlDisponivel(false);
+    } finally {
+      setLoadingOfertas(false);
+    }
+  }, []);
+
   useEffect(() => {
-    // Buscar cupons imediatamente
+    // Buscar cupons e ofertas imediatamente
     fetchCupons();
+    fetchOfertas();
 
     // Re-validar cupons a cada 5 minutos para garantir que expirados saiam
     const cuponsInterval = setInterval(fetchCupons, 5 * 60 * 1000);
@@ -232,6 +265,12 @@ export default function Home() {
       setAnonFingerprint(fp);
     };
     initFingerprint();
+
+    // Inicializa contador de pesquisas restantes para anônimos
+    if (!user) {
+      const used = parseInt(localStorage.getItem('autoparts_anon_searches') || '0', 10);
+      setAnonSearchesLeft(Math.max(0, 5 - used));
+    }
 
     // Check initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -382,9 +421,11 @@ export default function Home() {
       const data = await res.json();
 
       if (!res.ok) {
-        // Se o servidor sinalizou que precisa de cadastro, atualiza o contador local também
         if (data.require_signup) {
+          // Limite de 5 consultas gratuitas atingido — exibe msg amigável diretamente, sem relançar como erro
           localStorage.setItem('autoparts_anon_searches', '5');
+          setError(data.error || 'Você já utilizou suas 5 pesquisas gratuitas. Crie sua conta para continuar!');
+          return;
         }
         throw new Error(data.error || 'Erro ao buscar dados.');
       }
@@ -392,8 +433,11 @@ export default function Home() {
       // Sincroniza o contador local com o servidor após pesquisa bem-sucedida
       if (!user) {
         const currentCount = parseInt(localStorage.getItem('autoparts_anon_searches') || '0', 10);
-        localStorage.setItem('autoparts_anon_searches', (currentCount + 1).toString());
+        const newCount = currentCount + 1;
+        localStorage.setItem('autoparts_anon_searches', newCount.toString());
+        setAnonSearchesLeft(Math.max(0, 5 - newCount));
       }
+      setSystemOverloaded(false); // limpa banner de sobrecarga se havia
 
       setResult(data);
 
@@ -428,9 +472,23 @@ export default function Home() {
 
     } catch (err: any) {
       if (err.name === 'AbortError') {
-        return; // Ignore abort errors quietly
+        return; // Ignora cancelamentos silenciosamente
       }
-      setError(err.message);
+
+      // Detecta sobrecarga do Gemini para mostrar banner dedicado
+      const isOverload =
+        err.message?.includes('sobrecarregado') ||
+        err.message?.includes('429') ||
+        err.message?.includes('RESOURCE_EXHAUSTED') ||
+        err.message?.includes('servidores da Google');
+
+      if (isOverload) {
+        setSystemOverloaded(true);
+        setError('O sistema de IA está temporariamente indisponível. Tente novamente em alguns minutos.');
+      } else {
+        setSystemOverloaded(false);
+        setError(err.message);
+      }
 
       // Enviar log silenciosamente
       fetch('/api/logger', {
@@ -600,7 +658,12 @@ export default function Home() {
       });
       const data = await res.json();
       if (!res.ok) {
-        if (data.require_signup) localStorage.setItem('autoparts_anon_searches', '5');
+        if (data.require_signup) {
+          // Limite de 5 consultas gratuitas atingido — exibe msg amigável diretamente
+          localStorage.setItem('autoparts_anon_searches', '5');
+          setAutodiagError(data.error || 'Você já utilizou suas 5 consultas gratuitas. Crie sua conta para continuar!');
+          return;
+        }
         throw new Error(data.error || 'Erro ao processar o diagnóstico.');
       }
       if (!user) {
@@ -694,6 +757,33 @@ export default function Home() {
             Encontre a peça exata pelo código OEM ou aplicação técnica.
           </p>
         </div>
+
+        {/* Banner: Sistema Sobrecarregado (Gemini 429) */}
+        {systemOverloaded && (
+          <div className="max-w-3xl mx-auto w-full mb-4 flex items-start gap-3 bg-[#FF9500]/10 border border-[#FF9500]/30 rounded-2xl px-4 py-3">
+            <AlertTriangle className="w-5 h-5 text-[#FF9500] shrink-0 mt-0.5" />
+            <div>
+              <p className="text-[#FF9500] font-semibold text-sm">Sistema de IA temporariamente sobrecarregado</p>
+              <p className="text-[#8E8E93] text-xs mt-0.5">Os servidores da Google estão com alta demanda. Aguarde 1-2 minutos e tente novamente. Seus dados não foram perdidos.</p>
+            </div>
+          </div>
+        )}
+
+        {/* Contador de pesquisas gratuitas para usuários anônimos */}
+        {!user && anonSearchesLeft !== null && anonSearchesLeft <= 3 && (
+          <div className={`max-w-3xl mx-auto w-full mb-4 flex items-center gap-3 ${anonSearchesLeft === 0 ? 'bg-[#FF3B30]/10 border-[#FF3B30]/30' : 'bg-[#FF9500]/10 border-[#FF9500]/30'} border rounded-2xl px-4 py-3`}>
+            <Zap className={`w-4 h-4 shrink-0 ${anonSearchesLeft === 0 ? 'text-[#FF3B30]' : 'text-[#FF9500]'}`} />
+            <div className="flex-1">
+              {anonSearchesLeft === 0 ? (
+                <p className="text-[#FF3B30] text-sm font-semibold">Limite atingido — <Link href="/login" className="underline hover:text-white transition-colors">Crie sua conta grátis</Link> para continuar</p>
+              ) : (
+                <p className="text-[#FF9500] text-sm">
+                  <span className="font-bold">{anonSearchesLeft} pesquisa{anonSearchesLeft !== 1 ? 's' : ''}</span> gratuita{anonSearchesLeft !== 1 ? 's' : ''} restante{anonSearchesLeft !== 1 ? 's' : ''} · <Link href="/login" className="underline hover:text-white transition-colors">Cadastre-se grátis</Link> para pesquisas ilimitadas
+                </p>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Search Bar Container */}
         <div className="max-w-3xl mx-auto w-full mb-12 relative flex flex-col items-center">
@@ -898,39 +988,115 @@ export default function Home() {
               </button>
             </form>
           ) : activeTab === 'coupons' ? (
-            <div className="w-full bg-[#1C1C1E]/70 backdrop-blur-2xl border border-white/10 rounded-[32px] p-6 shadow-[0_8px_30px_rgb(50,173,230,0.05)] transition-all duration-300 animate-in fade-in zoom-in-95">
-              <div className="text-center mb-6">
-                <h2 className="text-2xl font-bold text-white flex items-center justify-center gap-2 mb-2">
-                  <Ticket className="w-6 h-6 text-[#32ADE6]" />
-                  Cupons Disponíveis
-                </h2>
-                <p className="text-[#8E8E93] text-sm max-w-md mx-auto">
-                  Economize ainda mais em suas compras utilizando nossos cupons selecionados para autopeças no Mercado Livre e parceiros.
-                </p>
+            <div className="w-full bg-[#1C1C1E]/70 backdrop-blur-2xl border border-white/10 rounded-[32px] p-5 sm:p-6 shadow-[0_8px_30px_rgb(255,45,85,0.04)] transition-all duration-300 animate-in fade-in zoom-in-95">
+
+              {/* Header */}
+              <div className="flex items-center justify-between mb-5">
+                <div>
+                  <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                    <Ticket className="w-5 h-5 text-[#FF2D55]" />
+                    Ofertas em Autopeças
+                  </h2>
+                  <p className="text-[#8E8E93] text-[12px] mt-0.5">
+                    Resultados em tempo real · Atualizado agora
+                  </p>
+                </div>
+                <button
+                  onClick={fetchOfertas}
+                  disabled={loadingOfertas}
+                  className="flex items-center gap-1.5 px-3 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-[#8E8E93] hover:text-white text-[12px] font-medium transition-all disabled:opacity-40"
+                >
+                  <Loader2 className={`w-3.5 h-3.5 ${loadingOfertas ? 'animate-spin text-[#FF2D55]' : ''}`} />
+                  {loadingOfertas ? 'Buscando...' : 'Atualizar'}
+                </button>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {loadingCupons ? (
-                  <div className="flex justify-center col-span-1 sm:col-span-2 py-8">
-                    <Loader2 className="w-8 h-8 text-[#32ADE6] animate-spin" />
+              {/* Cupons do Supabase (se houver) */}
+              {cuponsData.length > 0 && (
+                <div className="mb-6">
+                  <h3 className="text-[12px] font-bold text-[#32ADE6] uppercase tracking-widest mb-3 flex items-center gap-1.5">
+                    <Tag className="w-3.5 h-3.5" /> Cupons de Desconto
+                  </h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {cuponsData.map((coupon, i) => (
+                      <CouponCard key={coupon.id || i} coupon={coupon} index={i} />
+                    ))}
                   </div>
-                ) : cuponsData.length === 0 ? (
-                  <div className="col-span-1 sm:col-span-2 flex flex-col items-center justify-center py-12 text-center">
-                    <div className="w-16 h-16 rounded-2xl bg-[#32ADE6]/10 flex items-center justify-center mb-4">
-                      <AlertTriangle className="w-8 h-8 text-[#8E8E93]" />
+                </div>
+              )}
+
+              {/* Ofertas em Tempo Real */}
+              <div>
+                {cuponsData.length > 0 && (
+                  <h3 className="text-[12px] font-bold text-[#FF2D55] uppercase tracking-widest mb-3 flex items-center gap-1.5">
+                    <Zap className="w-3.5 h-3.5" /> Ofertas com Desconto
+                  </h3>
+                )}
+
+                {loadingOfertas ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                    {[1, 2, 3, 4].map(i => (
+                      <div key={i} className="rounded-2xl bg-[#2C2C2E]/40 border border-white/5 overflow-hidden animate-pulse">
+                        <div className="h-32 bg-white/5" />
+                        <div className="p-4 space-y-3">
+                          <div className="h-4 bg-white/5 rounded w-full" />
+                          <div className="h-4 bg-white/5 rounded w-3/4" />
+                          <div className="h-7 bg-white/5 rounded w-1/2" />
+                          <div className="grid grid-cols-2 gap-2">
+                            <div className="h-9 bg-white/5 rounded-xl" />
+                            <div className="h-9 bg-white/5 rounded-xl" />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : ofertasError ? (
+                  <div className="flex flex-col items-center justify-center py-12 text-center">
+                    <div className="w-16 h-16 rounded-2xl bg-[#FF3B30]/10 flex items-center justify-center mb-4">
+                      <AlertTriangle className="w-8 h-8 text-[#FF3B30]/70" />
                     </div>
-                    <h3 className="text-white font-bold text-lg mb-2">Nenhum cupom disponível</h3>
-                    <p className="text-[#8E8E93] text-sm max-w-sm">
-                      No momento não há cupons válidos. Volte em breve para novas ofertas exclusivas!
+                    <h3 className="text-white font-bold text-base mb-1">Erro de conexão</h3>
+                    <p className="text-[#8E8E93] text-sm max-w-xs mb-4">{ofertasError}</p>
+                    <button onClick={fetchOfertas} className="px-4 py-2 bg-[#FF2D55]/10 hover:bg-[#FF2D55]/20 border border-[#FF2D55]/20 text-white text-sm font-bold rounded-xl transition-all">
+                      Tentar Novamente
+                    </button>
+                  </div>
+                ) : mlDisponivel === false && ofertasData.length === 0 ? (
+                  /* ML indisponível neste ambiente — mensagem honesta */
+                  <div className="flex flex-col items-center justify-center py-10 text-center">
+                    <div className="w-16 h-16 rounded-2xl bg-[#FF9500]/10 border border-[#FF9500]/20 flex items-center justify-center mb-4">
+                      <Package className="w-8 h-8 text-[#FF9500]/70" />
+                    </div>
+                    <h3 className="text-white font-bold text-base mb-2">Integração ML em configuração</h3>
+                    <p className="text-[#8E8E93] text-[13px] max-w-sm mb-2 leading-relaxed">
+                      A busca de ofertas em tempo real requer token de acesso do Mercado Livre.
+                      Configure <strong className="text-white">ML_APP_TOKEN</strong> no painel de variáveis de ambiente.
+                    </p>
+                    <p className="text-[#8E8E93] text-[11px] max-w-xs">
+                      Enquanto isso, use o botão <strong className="text-white">Buscar Peça</strong> para encontrar produtos com links afiliados diretos.
                     </p>
                   </div>
+                ) : ofertasData.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-12 text-center">
+                    <div className="w-16 h-16 rounded-2xl bg-white/5 flex items-center justify-center mb-4">
+                      <Ticket className="w-8 h-8 text-[#8E8E93]" />
+                    </div>
+                    <h3 className="text-white font-bold text-base mb-1">Nenhuma oferta com desconto agora</h3>
+                    <p className="text-[#8E8E93] text-sm max-w-xs mb-4">O ML não retornou itens com desconto confirmado neste momento.</p>
+                    <button onClick={fetchOfertas} className="px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/10 text-white text-sm font-bold rounded-xl transition-all">
+                      Buscar Novamente
+                    </button>
+                  </div>
                 ) : (
-                  cuponsData.map((coupon, i) => (
-                    <CouponCard key={coupon.id || i} coupon={coupon} index={i} />
-                  ))
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                    {ofertasData.map((oferta, i) => (
+                      <OfertaCard key={oferta.id || i} oferta={oferta} index={i} />
+                    ))}
+                  </div>
                 )}
               </div>
             </div>
+
           ) : activeTab === 'autodiag' ? (
             <div className="w-full bg-[#1C1C1E]/70 backdrop-blur-2xl border border-white/10 rounded-[32px] shadow-[0_8px_30px_rgb(48,209,88,0.05)] transition-all duration-300 animate-in fade-in zoom-in-95 overflow-hidden">
               {/* Header */}
@@ -1242,75 +1408,27 @@ export default function Home() {
               </button>
             </div>
 
-            {/* Opção Rápida de Compra — Código OEM + Botão ML */}
-            {(result.dados_tecnicos?.top_3_marcas && result.dados_tecnicos.top_3_marcas.length > 0) && (
-              <div className="rounded-2xl sm:rounded-[32px] bg-[#1C1C1E]/60 backdrop-blur-xl border border-white/10 p-4 sm:p-6 shadow-[0_8px_30px_rgb(0,0,0,0.5)]">
-                <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 items-stretch">
-
-                  {/* Código OEM */}
-                  {(() => {
-                    const oem = result.dados_tecnicos?.identificacao_tecnica?.codigo_oem;
-                    const hasOem = oem && !oem.includes('Requer') && !oem.includes('Consultar') && !oem.includes('Consulte') && oem.length > 3;
-                    return (
-                      <div className="flex-1 flex flex-col justify-between rounded-[20px] bg-black/40 border border-[#32ADE6]/20 p-4">
-                        <h3 className="text-[#32ADE6] font-bold text-[13px] sm:text-[15px] mb-2 flex items-center gap-2">
-                          <span>🏷️</span> Código da Peça Original
-                        </h3>
-                        <p className="text-[#8E8E93] text-[11px] mb-2">Use este código na autopeças ou concessionária local:</p>
-                        {hasOem ? (
-                          <>
-                            <div className="flex flex-col bg-[#32ADE6]/10 border border-[#32ADE6]/30 rounded-lg px-3 py-2 mb-3">
-                              <span className="text-[10px] text-[#32ADE6]/90 font-bold uppercase tracking-wider mb-0.5">Montadora (OEM)</span>
-                              <span className="text-white font-mono text-[15px] sm:text-[17px] font-bold tracking-wider break-all">{oem}</span>
-                            </div>
-                            <a
-                              href={buildMlLink(oem)}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="w-full mt-auto py-2 bg-[#32ADE6]/10 hover:bg-[#32ADE6]/20 border border-[#32ADE6]/20 hover:border-[#32ADE6]/40 rounded-xl text-white text-[12px] font-bold transition-all text-center flex items-center justify-center gap-1.5"
-                            >
-                              <span>🎯</span> Buscar OEM Exato no ML
-                            </a>
-                          </>
-                        ) : (
-                          <p className="text-[#8E8E93] text-[12px] italic">Especifique o veículo para obter o código OEM exato.</p>
-                        )}
-                      </div>
-                    );
-                  })()}
-
-                  {/* Botão ML */}
-                  {(() => {
-                    const topMarca = result.dados_tecnicos?.top_3_marcas?.[0];
-                    const searchWord = topMarca?.termo_busca_mercadolivre || '';
-                    const link = buildMlLink(searchWord);
-                    return (
-                      <a
-                        href={link}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="flex-1 flex flex-col items-center justify-center p-4 sm:p-5 rounded-[20px] bg-gradient-to-r from-[#FF2D55] to-[#ff0036] text-white transition-all duration-300 shadow-[0_4px_20px_rgba(255,45,85,0.4)] hover:shadow-[0_8px_30px_rgba(255,45,85,0.6)] hover:scale-[1.02] cursor-pointer"
-                      >
-                        <span className="font-extrabold text-[16px] sm:text-[20px] flex items-center justify-center text-center gap-2 mb-1">
-                          <span>📦</span>
-                          <span>Comprar no Mercado Livre</span>
-                        </span>
-                        {topMarca && (
-                          <span className="text-[11px] sm:text-[13px] font-medium opacity-90 text-center mb-2">
-                            Melhor Qualidade: <strong>{topMarca.marca}</strong>
-                          </span>
-                        )}
-                        <span className="text-[10px] uppercase tracking-[0.12em] font-semibold flex items-center gap-1.5 bg-black/20 py-1 px-2.5 rounded-full border border-black/10">
-                          <span className="w-1.5 h-1.5 rounded-full bg-[#32ADE6] animate-pulse"></span>
-                          Ver Resultado Exato
-                        </span>
-                      </a>
-                    );
-                  })()}
-
+            {/* Banner OEM compacto */}
+            {(() => {
+              const oem = result.dados_tecnicos?.identificacao_tecnica?.codigo_oem;
+              const hasOem = oem && !oem.includes('Requer') && !oem.includes('Consultar') && !oem.includes('Consulte') && oem.length > 3;
+              if (!hasOem) return null;
+              return (
+                <div className="rounded-2xl bg-[#1C1C1E]/60 backdrop-blur-xl border border-[#32ADE6]/20 px-4 py-3 flex items-center gap-3 flex-wrap">
+                  <span className="text-[11px] text-[#32ADE6] font-bold uppercase tracking-wider shrink-0">🏷️ OEM</span>
+                  <span className="font-mono text-white font-bold text-[13px] tracking-wider">{oem}</span>
+                  <a
+                    href={buildMlLink(oem)}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="ml-auto text-[11px] font-bold bg-[#32ADE6]/10 hover:bg-[#32ADE6]/20 border border-[#32ADE6]/30 text-[#32ADE6] px-3 py-1.5 rounded-xl transition-all whitespace-nowrap"
+                  >
+                    🎯 Buscar OEM no ML
+                  </a>
                 </div>
-              </div>
-            )}
+              );
+            })()}
+
 
             {/* Analysis Container */}
             <div className="rounded-2xl sm:rounded-[32px] bg-[#1C1C1E]/60 backdrop-blur-xl border border-white/10 shadow-[0_8px_30px_rgb(0,0,0,0.5)] p-4 sm:p-6 md:p-10">
@@ -1329,7 +1447,60 @@ export default function Home() {
               {result.dados_tecnicos?.identificacao_tecnica ? (
                 <div className="space-y-8 text-[#E5E5EA] text-sm md:text-base leading-relaxed">
 
-                  {/* Identificação Técnica */}
+                  {/* ⭐ Top 3 Marcas — PRIMEIRO (ação imediata de compra) */}
+                  {result.dados_tecnicos.top_3_marcas && result.dados_tecnicos.top_3_marcas.length > 0 && (
+                    <div>
+                      <h3 className="text-lg sm:text-xl font-bold text-white mb-3 sm:mb-4 border-b border-white/10 pb-2">
+                        ⭐ Top 3 Marcas Recomendadas
+                      </h3>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
+                        {result.dados_tecnicos.top_3_marcas.map((marcaItem: any, idx: number) => {
+                          const isBest = idx === 0;
+                          const termo = (marcaItem.termo_busca_mercadolivre || '').trim();
+                          const mlLink = buildMlLink(termo);
+                          const shopeeLink = buildShopeeLink(termo);
+                          return (
+                            <div key={`brand-${idx}`} className={`bg-[#2C2C2E]/60 border ${isBest ? 'border-[#FF2D55]/50 shadow-[0_4px_15px_rgba(255,45,85,0.15)] ring-1 ring-[#FF2D55]/20' : 'border-white/10'} rounded-xl sm:rounded-2xl p-3 sm:p-4 flex flex-col relative overflow-hidden`}>
+                              {isBest && (
+                                <div className="absolute top-0 right-0 bg-gradient-to-r from-[#FF2D55] to-[#FF3B30] text-white text-[9px] font-bold px-2.5 py-1 rounded-bl-lg uppercase tracking-wider">
+                                  1ª Opção
+                                </div>
+                              )}
+                              <h4 className={`text-sm sm:text-base font-bold mb-1.5 ${isBest ? 'text-[#FF2D55]' : 'text-white'}`}>{marcaItem.marca}</h4>
+                              <div className="bg-black/30 rounded-lg px-2 py-1.5 mb-2 border border-white/5">
+                                <span className="text-[9px] text-[#8E8E93] font-bold uppercase tracking-widest block">Código</span>
+                                <span className="text-[#E5E5EA] font-mono text-[12px] font-black tracking-wide break-all">{marcaItem.codigo_peca}</span>
+                              </div>
+                              <p className="text-[11px] sm:text-[12px] text-[#8E8E93] flex-grow leading-relaxed mb-3">
+                                {marcaItem.justificativa}
+                              </p>
+                              {/* Botões ML + Shopee unidos */}
+                              <div className="grid grid-cols-2 gap-1.5 mt-auto">
+                                <a
+                                  href={mlLink}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="py-2 bg-[#FF2D55]/10 hover:bg-[#FF2D55]/20 border border-[#FF2D55]/20 hover:border-[#FF2D55]/40 rounded-xl text-white text-[11px] font-bold transition-all text-center flex items-center justify-center gap-1"
+                                >
+                                  <span>🛒</span> ML
+                                </a>
+                                <a
+                                  href={shopeeLink}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="py-2 bg-[#EE4D2D]/10 hover:bg-[#EE4D2D]/20 border border-[#EE4D2D]/20 hover:border-[#EE4D2D]/40 rounded-xl text-white text-[11px] font-bold transition-all text-center flex items-center justify-center gap-1"
+                                >
+                                  <span>🛍️</span> Shopee
+                                </a>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 🛠️ Identificação Técnica — após cards de compra */}
                   <div>
                     <h3 className="text-lg sm:text-xl font-bold text-white mb-3 sm:mb-4 border-b border-white/10 pb-2">🛠️ Identificação Técnica</h3>
                     {result.dados_tecnicos.identificacao_tecnica.breve_explicativo && (
@@ -1347,72 +1518,27 @@ export default function Home() {
                     </ul>
                   </div>
 
-                  {/* Intercambiabilidade */}
-                  <div>
-                    <h3 className="text-xl font-bold text-white mb-4 border-b border-white/10 pb-2">🔄 Compatibilidade Cruzada</h3>
-                    <ul className="list-disc list-inside space-y-1 text-[#E5E5EA]">
-                      {result.dados_tecnicos.intercambiabilidade?.map((item: string, idx: number) => (
-                        <li key={idx}>{item}</li>
-                      ))}
-                    </ul>
-                  </div>
-
-                  {/* Top 3 Marcas */}
-                  {result.dados_tecnicos.top_3_marcas && result.dados_tecnicos.top_3_marcas.length > 0 && (
-                    <div className="mt-6 sm:mt-8">
-                      <h3 className="text-lg sm:text-xl font-bold text-white mb-3 sm:mb-4 border-b border-white/10 pb-2">
-                        ⭐ Top 3 Melhores Marcas (Recomendação IA)
-                      </h3>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
-                        {result.dados_tecnicos.top_3_marcas.map((marcaItem: any, idx: number) => {
-                          const isBest = idx === 0;
-                          const termo = (marcaItem.termo_busca_mercadolivre || '').trim();
-                          const mlLink = buildMlLink(termo);
-
-                          return (
-                            <div key={`brand-${idx}`} className={`bg-[#2C2C2E]/60 border ${isBest ? 'border-[#FF2D55]/50 shadow-[0_4px_15px_rgba(255,45,85,0.15)] ring-1 ring-[#FF2D55]/20' : 'border-white/10'} rounded-xl sm:rounded-2xl p-4 sm:p-5 flex flex-col relative overflow-hidden`}>
-
-                              {isBest && (
-                                <div className="absolute top-0 right-0 bg-gradient-to-r from-[#FF2D55] to-[#FF3B30] text-white text-[9px] font-bold px-2.5 py-1 rounded-bl-lg uppercase tracking-wider">
-                                  1ª Opção
-                                </div>
-                              )}
-
-                              <h4 className={`text-base sm:text-lg font-bold mb-2 ${isBest ? 'text-[#FF2D55]' : 'text-white'}`}>{marcaItem.marca}</h4>
-
-                              <div className="bg-black/30 rounded-xl p-2 sm:p-2.5 mb-3 border border-white/5">
-                                <span className="text-[9px] sm:text-[10px] text-[#8E8E93] font-bold uppercase tracking-widest block mb-0.5">Código da Peça</span>
-                                <span className="text-[#E5E5EA] font-mono text-[12px] sm:text-[15px] font-black tracking-wide break-all block">{marcaItem.codigo_peca}</span>
-                              </div>
-
-                              <p className="text-[12px] sm:text-[13px] text-[#E5E5EA] flex-grow leading-relaxed mb-3">
-                                {marcaItem.justificativa}
-                              </p>
-
-                              <a
-                                href={mlLink}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="w-full mt-auto py-2 sm:py-2.5 bg-white/5 hover:bg-[#FF2D55]/20 border border-white/10 hover:border-[#FF2D55]/30 rounded-xl text-white text-[12px] sm:text-[13px] font-bold transition-all text-center flex items-center justify-center gap-1.5"
-                              >
-                                <span>🛒</span> Mercado Livre
-                              </a>
-                            </div>
-                          );
-                        })}
-                      </div>
+                  {/* 🔄 Compatibilidade Cruzada */}
+                  {result.dados_tecnicos.intercambiabilidade && result.dados_tecnicos.intercambiabilidade.length > 0 && (
+                    <div>
+                      <h3 className="text-xl font-bold text-white mb-4 border-b border-white/10 pb-2">🔄 Compatibilidade Cruzada</h3>
+                      <ul className="list-disc list-inside space-y-1 text-[#E5E5EA]">
+                        {result.dados_tecnicos.intercambiabilidade.map((item: string, idx: number) => (
+                          <li key={idx}>{item}</li>
+                        ))}
+                      </ul>
                     </div>
                   )}
 
-                  {/* Referência AliExpress */}
+                  {/* 🌏 Referência AliExpress */}
                   {result.dados_tecnicos.referencia_aliexpress && (
-                    <div className="bg-[#FFCC00]/5 border border-[#FFCC00]/20 p-5 rounded-2xl mt-6">
-                      <h3 className="text-lg font-bold text-[#FFCC00] mb-3 flex items-center">
+                    <div className="bg-[#FFCC00]/5 border border-[#FFCC00]/20 p-5 rounded-2xl">
+                      <h3 className="text-lg font-bold text-[#FFCC00] mb-3 flex items-center gap-2">
                         🌏 Referência AliExpress (Importação)
                       </h3>
                       <ul className="space-y-2 text-[#E5E5EA]">
                         <li><strong className="text-white">Termo de Busca:</strong> {result.dados_tecnicos.referencia_aliexpress.termo_busca}</li>
-                        <li><strong className="text-white">Recomendação do Especialista:</strong> {result.dados_tecnicos.referencia_aliexpress.recomendacao}</li>
+                        <li><strong className="text-white">Recomendação:</strong> {result.dados_tecnicos.referencia_aliexpress.recomendacao}</li>
                         <li className="pt-2">
                           <a
                             href={result.dados_tecnicos.referencia_aliexpress.link_busca}
@@ -1427,44 +1553,8 @@ export default function Home() {
                     </div>
                   )}
 
-                  {/* Busca Shopee — 3 campos de busca com afiliado */}
-                  {result.dados_tecnicos.top_3_marcas && result.dados_tecnicos.top_3_marcas.length > 0 && (
-                    <div className="mt-6">
-                      <h3 className="text-lg sm:text-xl font-bold text-white mb-3 sm:mb-4 border-b border-white/10 pb-2 flex items-center gap-2">
-                        <ShoppingBag className="w-5 h-5 text-[#EE4D2D]" />
-                        Buscar na Shopee
-                      </h3>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                        {result.dados_tecnicos.top_3_marcas.slice(0, 3).map((marcaItem: any, idx: number) => {
-                          const termo = (marcaItem.termo_busca_mercadolivre || '').trim();
-                          const shopeeLink = buildShopeeLink(termo);
-                          const isBest = idx === 0;
-                          return (
-                            <a
-                              key={`shopee-${idx}`}
-                              href={shopeeLink}
-                              target="_blank"
-                              rel="noreferrer"
-                              className={`flex flex-col items-center justify-center p-4 rounded-2xl border transition-all duration-300 hover:scale-[1.02] group ${
-                                isBest
-                                  ? 'bg-gradient-to-b from-[#EE4D2D]/20 to-[#EE4D2D]/5 border-[#EE4D2D]/40 shadow-[0_4px_15px_rgba(238,77,45,0.15)]'
-                                  : 'bg-[#2C2C2E]/50 border-white/10 hover:border-[#EE4D2D]/30'
-                              }`}
-                            >
-                              <ShoppingBag className={`w-5 h-5 mb-2 ${isBest ? 'text-[#EE4D2D]' : 'text-[#8E8E93] group-hover:text-[#EE4D2D]'} transition-colors`} />
-                              <span className={`text-[12px] font-bold mb-1 text-center ${isBest ? 'text-[#EE4D2D]' : 'text-white'}`}>
-                                {marcaItem.marca}
-                              </span>
-                              <span className="text-[10px] text-[#8E8E93] text-center line-clamp-2">{termo}</span>
-                              <span className="mt-2 text-[10px] font-bold text-[#EE4D2D]/80 uppercase tracking-wider">Ver na Shopee →</span>
-                            </a>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-
                 </div>
+
               ) : (
                 <div className="prose prose-invert max-w-none prose-sm md:prose-base text-[#E5E5EA]">
                   <ReactMarkdown

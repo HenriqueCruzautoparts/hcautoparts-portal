@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "db:push": "node db-push.mjs"
+    "db:push": "node db-push.mjs",
+    "cupons:fix": "node apply-cupons-fix.mjs",
+    "cupons:renew": "node scripts/auto-renew-cupons.mjs"
   },
   "dependencies": {
     "@google/genai": "^1.42.0",

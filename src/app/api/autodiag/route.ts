@@ -16,8 +16,13 @@ async function getAutodiagAnalysis(
     throw new Error("Erro de Configuração: GEMINI_API_KEY não encontrada.");
   }
 
-  const MODEL_NAME = "gemini-2.5-flash";
-  const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${apiKey}`;
+// Modelos em ordem de prioridade — fallback automático em caso de cota esgotada
+const GEMINI_MODELS = [
+  "gemini-2.5-flash",
+  "gemini-1.5-flash",
+  "gemini-1.5-flash-8b",
+];
+
 
   const dtcsList = dtcs.length > 0 ? dtcs.join(", ") : "Nenhum código informado";
   const liveDataSection = liveData?.trim()
@@ -101,59 +106,75 @@ Responda em Português do Brasil.
 
   const contents = [{ parts }];
 
-  const MAX_RETRIES = 3;
-  let lastError: Error | null = null;
+  // Tenta cada modelo disponível em sequência (fallback automático em caso de 429)
+  for (let modelIndex = 0; modelIndex < GEMINI_MODELS.length; modelIndex++) {
+    const modelName = GEMINI_MODELS[modelIndex];
+    const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+    const MAX_RETRIES = 2;
 
-  for (let i = 0; i < MAX_RETRIES; i++) {
-    try {
-      const res = await fetch(API_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents,
-          generationConfig: {
-            temperature: 0.3,
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      try {
+        const res = await fetch(API_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents,
+            generationConfig: {
+              temperature: 0.3,
+            }
+          })
+        });
+
+        const data = await res.json();
+
+        if (data.error) {
+          const isQuotaError =
+            data.error.status === "RESOURCE_EXHAUSTED" ||
+            data.error.code === 429;
+          const isTransient =
+            isQuotaError ||
+            data.error.status === "UNAVAILABLE" ||
+            data.error.code === 503;
+
+          if (isQuotaError) {
+            console.warn(`AutoDiag: modelo ${modelName} com cota esgotada. Próximo modelo...`);
+            break; // vai para próximo modelo
           }
-        })
-      });
 
-      const data = await res.json();
+          if (isTransient && attempt < MAX_RETRIES - 1) {
+            const delay = 1500 * Math.pow(2, attempt);
+            await new Promise(resolve => setTimeout(resolve, delay));
+            continue;
+          }
 
-      if (data.error) {
-        const isTransient =
-          data.error.status === "RESOURCE_EXHAUSTED" ||
-          data.error.code === 429 ||
-          data.error.status === "UNAVAILABLE" ||
-          data.error.code === 503;
+          throw new Error(`Erro API Gemini: ${data.error.message}`);
+        }
 
-        if (isTransient && i < MAX_RETRIES - 1) {
+        const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (!text) throw new Error("A IA não retornou conteúdo válido.");
+
+        return text;
+
+      } catch (e: any) {
+        if (e.message?.includes('429') || e.message?.includes('RESOURCE_EXHAUSTED')) {
+          console.warn(`AutoDiag: cota esgotada no modelo ${modelName}. Próximo...`);
+          break;
+        }
+        if (attempt < MAX_RETRIES - 1) {
           await new Promise(resolve => setTimeout(resolve, 1500));
           continue;
         }
-
-        if (data.error.status === "RESOURCE_EXHAUSTED" || data.error.code === 429) {
-          throw new Error("O sistema está sobrecarregado. Aguarde 30 segundos e tente novamente.");
+        if (modelIndex < GEMINI_MODELS.length - 1) {
+          console.warn(`AutoDiag: falha no modelo ${modelName}. Tentando próximo...`);
+          break;
         }
-        throw new Error(`Erro API Gemini: ${data.error.message}`);
+        throw e;
       }
-
-      const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (!text) throw new Error("A IA não retornou conteúdo válido.");
-
-      return text;
-
-    } catch (e: any) {
-      lastError = e;
-      if (i < MAX_RETRIES - 1) {
-        await new Promise(resolve => setTimeout(resolve, 1500));
-        continue;
-      }
-      throw e;
     }
   }
 
-  throw lastError || new Error("Falha ao comunicar com a IA após várias tentativas.");
-}
+  throw new Error("O sistema de diagnóstico está temporariamente sobrecarregado. Aguarde alguns minutos e tente novamente.");}
+
 
 export async function POST(req: Request) {
   let requestContext: any = {};

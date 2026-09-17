@@ -34,6 +34,13 @@ function isPartCode(query: string): boolean {
     return /^[A-Z0-9]{3,}[-]?[A-Z0-9]+$/i.test(trimmed.replace(/\s/g, ''));
 }
 
+// Modelos em ordem de prioridade — tenta o mais capaz primeiro e desce até conseguir resposta
+const GEMINI_MODELS = [
+    "gemini-2.5-flash",
+    "gemini-1.5-flash",
+    "gemini-1.5-flash-8b",
+];
+
 async function getGeminiAnalysis(query: string, image?: string): Promise<GeminiResponse> {
     const apiKey = (process.env.GEMINI_API_KEY || "").trim();
 
@@ -42,52 +49,59 @@ async function getGeminiAnalysis(query: string, image?: string): Promise<GeminiR
         throw new Error("Erro de Configuração. A chave de API (GEMINI_API_KEY) não foi encontrada no servidor.");
     }
 
-    const MODEL_NAME = "gemini-2.5-flash";
-    const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${apiKey}`;
-
     const buscaPorCodigo = isPartCode(query);
 
     const promptMestre = `
-    Você é um cataloguista técnico automotivo. Sua única tarefa é identificar a peça exata e retornar dados técnicos em JSON.
+    Você é um cataloguista técnico automotivo sênior com 20 anos de experiência. Sua tarefa é identificar a peça exata e retornar dados técnicos precisos em JSON.
 
     PESQUISA DO USUÁRIO: "${query || "Imagem da peça."}"
 
-    ${buscaPorCodigo ? `ATENÇÃO: "${query}" é um CÓDIGO DE PEÇA. Identifique fabricante e tipo pela numeração. O campo codigo_oem deve ser "${query}".` : ''}
+    ${buscaPorCodigo ? `ATENÇÃO: "${query}" é um CÓDIGO DE PEÇA. Identifique fabricante e tipo pela numeração. O campo codigo_oem deve ser exatamente "${query}".` : ''}
 
-    INSTRUÇÕES:
-    1. Identifique a peça, o veículo (com ANO e GERAÇÃO obrigatórios) e o código OEM.
-    2. Recomende 3 marcas aftermarket com seus códigos de referência cruzada.
-    3. Preencha o JSON abaixo. NÃO adicione texto fora do JSON.
+    INSTRUÇÕES OBRIGATÓRIAS:
+    1. Identifique a peça com MÁXIMA precisão — inclua veículo completo (marca, modelo, geração, ano, motor).
+    2. Recomende 3 marcas aftermarket reconhecidas com seus códigos de referência cruzada REAIS.
+    3. Retorne SOMENTE o JSON abaixo. ZERO texto fora do JSON.
 
-    REGRAS CRÍTICAS:
-    - Se a pesquisa menciona um ano (ex: "2011"), a geração do veículo DEVE ser identificada (ex: VW Saveiro 2011 = G5).
-    - Se a pesquisa menciona uma versão (Cross, GTI, etc.), a peça deve ser específica dessa versão.
-    - Forneça códigos reais. Se não souber com certeza, use "Consultar fornecedor".
-    - Na montagem do 'termo_busca_mercadolivre', crie a String IDEAL para achar essa peça exata. Use a inteligência para agregar O MÁXIMO DE INFORMAÇÕES VITAIS, preferencialmente unindo: Peça + Veículo + Motor + Ano + Marca Oferecida (ou o Código de Fabricante se ele for comum para buscas). Forme uma string que um comprador experiente digitaria para achar essa peça exata e que traga todos os resultados adequados.
+    REGRAS CRÍTICAS DE QUALIDADE:
+    - Se mencionar ano (ex: "2011"), identifique a geração OBRIGATORIAMENTE (ex: VW Saveiro 2011 = G5).
+    - Se mencionar versão (Cross, GTI, Titanium, etc.), a peça deve ser ESPECÍFICA dessa versão.
+    - Códigos OEM e de marca devem ser REAIS e verificáveis. Se não souber com certeza, escreva "Consultar fornecedor".
+    - intercambiabilidade: liste APENAS veículos com compatibilidade técnica comprovada, nunca suposições.
 
-    JSON (retorne SOMENTE isto, sem markdown):
+    REGRAS CRÍTICAS PARA termo_busca_mercadolivre:
+    - O termo deve ter entre 4 e 8 palavras. Nunca menos que 4 (vago) nem mais que 8 (longo demais).
+    - SEMPRE incluir: [nome da peça] + [modelo do veículo] + [geração ou ano] + [cilindrada/motor se relevante].
+    - Quando a marca tem código conhecido no mercado (ex: "mahle OC127"), inclua o código no termo.
+    - Use o código OEM no termo quando ele for comumente buscado (curto, alfanumérico, ex: "1J0615301B").
+    - NUNCA use termos genéricos sem especificação de veículo.
+    - ❌ ERRADO: "filtro oleo", "pastilha freio dianteira", "amortecedor"
+    - ✅ CERTO: "filtro oleo gol g5 1.6 2009 2013 mahle", "pastilha freio dianteira hb20 1.0 2012 2019 fras-le", "amortecedor dianteiro saveiro g6 1.6 cofap"
+    - Para busca por código OEM: "[código OEM] [nome da peça] [modelo]" — ex: "1K0498099E cubo roda polo 1.6"
+
+    JSON (retorne SOMENTE isto, sem markdown, sem texto antes ou depois):
     {
       "identificacao_tecnica": {
-        "peca": "Nome da peça",
-        "breve_explicativo": "Função da peça e notas de compatibilidade",
-        "codigo_oem": "Código OEM da montadora",
-        "nome_ingles": "Nome em inglês",
-        "veiculo_base": "Marca Modelo Versão Ano Motor (ex: VW Saveiro G5 2011 1.6)",
-        "validacao_catalogo": "Fonte de referência"
+        "peca": "Nome técnico completo da peça",
+        "breve_explicativo": "Função técnica da peça, quando substituir e notas de compatibilidade específicas",
+        "codigo_oem": "Código OEM da montadora (exato)",
+        "nome_ingles": "Nome técnico em inglês",
+        "veiculo_base": "Marca Modelo Geração Ano Motor (ex: VW Saveiro G5 2011 1.6 8V)",
+        "validacao_catalogo": "Fonte de referência (ex: Catálogo MAHLE 2024, TecDoc)"
       },
-      "intercambiabilidade": ["Veículo compatível (ano) - motor"],
+      "intercambiabilidade": ["Veículo compatível Geração (ano início-fim) - motor"],
       "top_3_marcas": [
         {
-          "marca": "NOME",
-          "codigo_peca": "Código da marca",
-          "justificativa": "Motivo da recomendação",
-          "termo_busca_mercadolivre": "Termo ideal e preciso para pesquisa desta marca no ML"
+          "marca": "NOME DA MARCA",
+          "codigo_peca": "Código real desta marca para esta peça",
+          "justificativa": "Motivo técnico objetivo da recomendação (qualidade, disponibilidade, custo-benefício)",
+          "termo_busca_mercadolivre": "Termo preciso de 4-8 palavras para busca desta marca específica no ML"
         }
       ],
       "referencia_aliexpress": {
-        "termo_busca": "Termo em inglês para busca",
-        "link_busca": "https://pt.aliexpress.com/w/wholesale-TERMO.html",
-        "recomendacao": "Análise custo-benefício"
+        "termo_busca": "Termo em inglês para busca no AliExpress (nome técnico + veículo em inglês)",
+        "link_busca": "https://pt.aliexpress.com/w/wholesale-TERMO-EM-INGLES.html",
+        "recomendacao": "Análise objetiva de custo-benefício e riscos de importação para esta peça específica"
       }
     }
     `;
@@ -107,65 +121,87 @@ async function getGeminiAnalysis(query: string, image?: string): Promise<GeminiR
         }];
     }
 
-    const MAX_RETRIES = 3;
-    let lastError = null;
+    // Tenta cada modelo disponível em sequência (fallback automático)
+    for (let modelIndex = 0; modelIndex < GEMINI_MODELS.length; modelIndex++) {
+        const modelName = GEMINI_MODELS[modelIndex];
+        const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+        const MAX_RETRIES = 2;
 
-    for (let i = 0; i < MAX_RETRIES; i++) {
-        try {
-            const res = await fetch(API_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    contents,
-                    generationConfig: {
-                        responseMimeType: "application/json",
-                        temperature: 0.2,
+        for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+            try {
+                const res = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents,
+                        generationConfig: {
+                            responseMimeType: "application/json",
+                            temperature: 0.2,
+                        }
+                    })
+                });
+
+                const data = await res.json();
+
+                if (data.error) {
+                    const isQuotaError =
+                        data.error.status === 'RESOURCE_EXHAUSTED' ||
+                        data.error.code === 429;
+                    const isTransient =
+                        isQuotaError ||
+                        data.error.status === 'UNAVAILABLE' ||
+                        data.error.code === 503;
+
+                    if (isQuotaError) {
+                        // Cota esgotada neste modelo — tenta o próximo imediatamente
+                        console.warn(`Modelo ${modelName} com cota esgotada (429). Tentando próximo modelo...`);
+                        break; // sai do loop de tentativas, vai para próximo modelo
                     }
-                })
-            });
 
-            const data = await res.json();
+                    if (isTransient && attempt < MAX_RETRIES - 1) {
+                        const delay = 1500 * Math.pow(2, attempt); // backoff: 1.5s, 3s
+                        console.warn(`Modelo ${modelName} indisponível (tentativa ${attempt + 1}). Aguardando ${delay}ms...`);
+                        await new Promise(resolve => setTimeout(resolve, delay));
+                        continue;
+                    }
 
-            if (data.error) {
-                // Erros de cota ou indisponibilidade temporária (503 / 429)
-                const isTransient = data.error.status === 'RESOURCE_EXHAUSTED' || 
-                                  data.error.code === 429 || 
-                                  data.error.status === 'UNAVAILABLE' || 
-                                  data.error.code === 503;
+                    throw new Error(`Erro API Google: ${data.error.message} (Status: ${data.error.status})`);
+                }
 
-                if (isTransient && i < MAX_RETRIES - 1) {
-                    console.warn(`Gemini indisponível (tentativa ${i+1}/${MAX_RETRIES}). Tentando novamente em 1.5s...`);
+                const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+                if (!text) throw new Error("A IA não retornou conteúdo válido.");
+
+                // Remove markdown residual caso venha
+                const cleanJson = text.replace(/^\s*```json\s*/g, '').replace(/\s*```\s*$/g, '').trim();
+                return JSON.parse(cleanJson) as GeminiResponse;
+
+            } catch (e: any) {
+                // Se for erro de cota (429), sai do loop interno para tentar próximo modelo
+                if (e.message?.includes('429') || e.message?.includes('RESOURCE_EXHAUSTED')) {
+                    console.warn(`Erro de cota no modelo ${modelName}. Próximo modelo...`);
+                    break;
+                }
+                console.error(`Erro na tentativa ${attempt + 1} do modelo ${modelName}:`, e.message);
+                if (attempt < MAX_RETRIES - 1) {
                     await new Promise(resolve => setTimeout(resolve, 1500));
                     continue;
                 }
-
-                if (data.error.status === 'RESOURCE_EXHAUSTED' || data.error.code === 429) {
-                    throw new Error("O sistema está com muitos acessos no momento. Por favor, aguarde 30 segundos e tente sua busca novamente.");
+                // Última tentativa deste modelo — vai para próximo
+                if (modelIndex < GEMINI_MODELS.length - 1) {
+                    console.warn(`Falha no modelo ${modelName}. Tentando próximo...`);
+                    break;
                 }
-                throw new Error(`Erro API Google: ${data.error.message} (Status: ${data.error.status})`);
+                throw e;
             }
-
-            const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-            if (!text) throw new Error("A IA não retornou conteúdo válido.");
-
-            // Fallback de segurança para remover markdown residual
-            const cleanJson = text.replace(/^\s*```json\s*/g, '').replace(/\s*```\s*$/g, '').trim();
-            return JSON.parse(cleanJson) as GeminiResponse;
-
-        } catch (e: any) {
-            lastError = e;
-            console.error(`Erro na tentativa ${i+1} do Gemini:`, e.message);
-            if (i < MAX_RETRIES - 1) {
-                await new Promise(resolve => setTimeout(resolve, 1500));
-                continue;
-            }
-            throw e;
         }
     }
-    throw lastError || new Error("Falha ao comunicar com a Inteligência Artificial após várias tentativas.");
-}
+
+    // Todos os modelos falharam
+    throw new Error("O sistema de IA está temporariamente sobrecarregado. Por favor, aguarde alguns minutos e tente novamente. Se o problema persistir, os servidores da Google podem estar com alta demanda.");}
+
 
 export async function POST(req: Request) {
+
     let requestContext: any = {};
     try {
         const payload = await req.json();
